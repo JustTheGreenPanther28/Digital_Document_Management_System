@@ -167,9 +167,7 @@ services:
     ports:
       - "80:80"
       - "443:443"
-    volumes:
-      # Let's Encrypt certs mounted from host — managed by Certbot on the VM
-      - /etc/letsencrypt:/etc/letsencrypt:ro
+    # No volume needed — self-signed TLS cert is generated inside the image at build time
     networks:
       - sih190_public
 
