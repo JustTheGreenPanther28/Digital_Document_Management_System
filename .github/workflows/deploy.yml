@@ -1,0 +1,175 @@
+# ==============================================================================
+# .github/workflows/deploy.yml
+# Automatic deployment to OCI VM on every push to main branch
+#
+# SETUP — Add these 3 secrets in your GitHub repo:
+#   Settings → Secrets and variables → Actions → New repository secret
+#
+#   OCI_HOST      = Your OCI VM public IP (e.g. 152.67.xx.xx)
+#   OCI_USER      = SSH username (opc, ubuntu, or oraclelinux)
+#   OCI_SSH_KEY   = Your private SSH key content (paste the whole .pem file)
+#   OCI_SECRETS   = All production secrets as one block (see format below)
+#
+# OCI_SECRETS format (paste this as one GitHub secret):
+#   POSTGRES_PASSWORD=yourStrongPassword123
+#   REDIS_PASSWORD=anotherStrongPassword456
+#   MINIO_ROOT_PASSWORD=minioStrongPassword789
+#   JWT_SECRET=your64hexcharsjwtsecret
+#   KMS_MASTER_KEY=yourbase64kmskey==
+#   PKI_KEYSTORE_PASSWORD=pkiPassword123
+# ==============================================================================
+
+name: 🚀 Deploy to OCI VM
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:   # Allow manual trigger from GitHub UI
+
+jobs:
+  deploy:
+    name: Deploy to OCI
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── Step 1: Show what triggered this deployment ──
+      - name: 📋 Deployment Info
+        run: |
+          echo "Deploying commit: ${{ github.sha }}"
+          echo "Triggered by: ${{ github.actor }}"
+          echo "Branch: ${{ github.ref_name }}"
+
+      # ── Step 2: First-time setup (only runs if /opt/forsic doesn't exist) ──
+      - name: 🔧 First-time VM Setup (if needed)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.OCI_HOST }}
+          username: ${{ secrets.OCI_USER }}
+          key: ${{ secrets.OCI_SSH_KEY }}
+          timeout: 120s
+          script: |
+            set -e
+            
+            # Install Docker if not present
+            if ! command -v docker &>/dev/null; then
+              echo "[*] Installing Docker..."
+              curl -fsSL https://get.docker.com | sudo sh
+              sudo usermod -aG docker $USER
+              echo "[OK] Docker installed."
+            fi
+            
+            # Clone repo if not present
+            if [ ! -d "/opt/forsic/app/.git" ]; then
+              echo "[*] Cloning repository..."
+              sudo mkdir -p /opt/forsic
+              sudo chown $USER:$USER /opt/forsic
+              git clone https://github.com/JustTheGreenPanther28/Secure_Digital_Document_Management_System-For_Legal_Investigation_Documents.git /opt/forsic/app
+              echo "[OK] Repo cloned."
+            fi
+            
+            # Create secrets directory
+            sudo mkdir -p /etc/forsic
+            sudo chmod 700 /etc/forsic
+            sudo chown $USER:$USER /etc/forsic
+
+      # ── Step 3: Write production secrets securely to the VM ──
+      # Each secret is individually encrypted in GitHub Secrets
+      # Go to: Repo → Settings → Secrets and variables → Actions → New repository secret
+      - name: 🔐 Inject Secrets onto VM
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.OCI_HOST }}
+          username: ${{ secrets.OCI_USER }}
+          key: ${{ secrets.OCI_SSH_KEY }}
+          timeout: 60s
+          envs: POSTGRES_PASSWORD,REDIS_PASSWORD,MINIO_ROOT_PASSWORD,JWT_SECRET,KMS_MASTER_KEY,PKI_KEYSTORE_PASSWORD
+          script: |
+            set -e
+            
+            # Write all secrets to a protected file (mode 600, only owner can read)
+            # GitHub masks these values in logs automatically
+            tee /etc/forsic/.env > /dev/null <<EOF
+            SPRING_PROFILES_ACTIVE=prod
+            POSTGRES_DB=sih190_db
+            POSTGRES_USER=sih190_user
+            POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+            SPRING_DATA_REDIS_HOST=redis
+            SPRING_DATA_REDIS_PORT=6379
+            REDIS_PASSWORD=${REDIS_PASSWORD}
+            MINIO_ROOT_USER=minioadmin
+            MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+            S3_BUCKET_NAME=sih190-evidence-vault
+            S3_QUARANTINE_BUCKET_NAME=sih190-quarantine-vault
+            CLAMAV_ENABLED=true
+            CLAMAV_FAIL_CLOSED=true
+            CLAMAV_HOST=clamav
+            CLAMAV_PORT=3310
+            ELASTICSEARCH_URL=http://elasticsearch:9200
+            ELASTICSEARCH_ENABLED=true
+            JWT_SECRET=${JWT_SECRET}
+            JWT_AUDIENCE=sih190-api
+            KMS_MASTER_KEY=${KMS_MASTER_KEY}
+            PKI_KEYSTORE_PASSWORD=${PKI_KEYSTORE_PASSWORD}
+            SERVER_PORT=8080
+            EOF
+            
+            chmod 600 /etc/forsic/.env
+            echo "[OK] Secrets written securely to /etc/forsic/.env (mode 600)"
+
+      # ── Step 4: Pull latest code and deploy ──
+      - name: 🐳 Pull Code & Deploy Containers
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.OCI_HOST }}
+          username: ${{ secrets.OCI_USER }}
+          key: ${{ secrets.OCI_SSH_KEY }}
+          timeout: 900s    # 15 minutes — Docker build takes time on first run
+          script: |
+            set -e
+            cd /opt/forsic/app
+            
+            echo "=== [1/4] Pulling latest code ==="
+            git pull origin main
+            
+            echo "=== [2/4] Copying secrets ==="
+            cp /etc/forsic/.env .env
+            chmod 600 .env
+            
+            echo "=== [3/4] Building & starting containers ==="
+            docker compose down --remove-orphans 2>/dev/null || true
+            docker compose build --no-cache
+            docker compose up -d
+            
+            echo "=== [4/4] Cleanup secrets from working dir ==="
+            rm -f .env
+            
+            echo "=== Waiting 30s for services to start... ==="
+            sleep 30
+            
+            echo "=== Container Status ==="
+            docker compose ps
+
+      # ── Step 5: Health check and print live URL ──
+      - name: ✅ Health Check & Print Live URL
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.OCI_HOST }}
+          username: ${{ secrets.OCI_USER }}
+          key: ${{ secrets.OCI_SSH_KEY }}
+          timeout: 60s
+          script: |
+            echo "=== Backend Health ==="
+            curl -sf http://localhost:8080/actuator/health || echo "Backend still warming up — check logs"
+            
+            PUBLIC_IP=$(curl -sf ifconfig.me 2>/dev/null || echo "${{ secrets.OCI_HOST }}")
+            
+            echo ""
+            echo "======================================================"
+            echo " ✅ DEPLOYMENT SUCCESSFUL!"
+            echo ""
+            echo " 🌐 Live URL: https://${PUBLIC_IP}"
+            echo " (Accept the browser self-signed certificate warning)"
+            echo ""
+            echo " 🔑 Login: admin / Password@123"
+            echo "======================================================"
