@@ -1,0 +1,58 @@
+package com.sih.casemanagement.controller;
+
+import com.sih.casemanagement.dto.CreateUserRequest;
+import com.sih.casemanagement.entity.User;
+import com.sih.casemanagement.service.UserService;
+import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+@RestController
+@RequestMapping("/api/v1/users")
+public class UserController {
+
+    private final UserService userService;
+
+    public UserController(UserService userService) {
+        this.userService = userService;
+    }
+
+    @GetMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'SENIOR_OFFICER')")
+    public ResponseEntity<List<User>> getAllUsers() {
+        return ResponseEntity.ok(userService.getAllUsers());
+    }
+
+    @PostMapping
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<User> createUser(@Valid @RequestBody CreateUserRequest request) {
+        User created = userService.createUser(
+            request.username(),
+            request.email(),
+            request.password(),
+            request.fullName(),
+            request.badgeNumber(),
+            request.department(),
+            request.securityClearance(),
+            request.roles()
+        );
+        return ResponseEntity.status(HttpStatus.CREATED).body(created);
+    }
+
+    @PatchMapping("/{id}/status")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<User> updateStatus(
+        @PathVariable UUID id,
+        @RequestBody Map<String, Boolean> body
+    ) {
+        boolean enabled = body.getOrDefault("enabled", true);
+        boolean locked = body.getOrDefault("locked", false);
+        return ResponseEntity.ok(userService.setUserStatus(id, enabled, locked));
+    }
+}

@@ -1,0 +1,118 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-[#08090E] text-slate-100 antialiased;
+    font-family: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, sans-serif;
+  }
+
+  code, pre, .font-mono {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  }
+}
+
+/* Custom smooth dark scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #08090E;
+}
+::-webkit-scrollbar-thumb {
+  background: #1A2035;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #2D3748;
+}
+
+/* Custom subtle horizontal scrollbar */
+.custom-scrollbar-x::-webkit-scrollbar {
+  height: 4px;
+}
+.custom-scrollbar-x::-webkit-scrollbar-track {
+  background: rgba(18, 21, 36, 0.4);
+  border-radius: 9999px;
+}
+.custom-scrollbar-x::-webkit-scrollbar-thumb {
+  background: #1E243B;
+  border-radius: 9999px;
+}
+.custom-scrollbar-x::-webkit-scrollbar-thumb:hover {
+  background: #3B4668;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Stakent Obsidian Glass Cards */
+.obsidian-panel {
+  background: rgba(14, 17, 28, 0.85);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.obsidian-card {
+  background: linear-gradient(180deg, rgba(20, 24, 40, 0.75) 0%, rgba(13, 16, 27, 0.9) 100%);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.6);
+}
+
+.obsidian-card:hover {
+  border-color: rgba(139, 92, 246, 0.3);
+  box-shadow: 0 15px 35px -10px rgba(0, 0, 0, 0.8), 0 0 20px -5px rgba(139, 92, 246, 0.15);
+}
+
+.glass-panel {
+  background: rgba(16, 19, 32, 0.85);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.glass-card {
+  background: rgba(20, 24, 41, 0.6);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* Glowing Featured Spotlight Card (Right Banner in reference) */
+.spotlight-purple-gradient {
+  background: radial-gradient(120% 120% at 80% 20%, rgba(168, 85, 247, 0.25) 0%, rgba(91, 33, 182, 0.4) 40%, rgba(15, 17, 30, 0.95) 100%);
+  border: 1px solid rgba(168, 85, 247, 0.3);
+  box-shadow: 0 20px 40px -15px rgba(124, 58, 237, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+
+/* Wave Glow Effect */
+.wave-glow {
+  filter: drop-shadow(0 4px 10px rgba(139, 92, 246, 0.5));
+}
+.wave-glow-green {
+  filter: drop-shadow(0 4px 10px rgba(16, 185, 129, 0.5));
+}
+.wave-glow-red {
+  filter: drop-shadow(0 4px 10px rgba(244, 63, 94, 0.5));
+}
+
+.alert-pulse {
+  animation: pulse-border 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse-border {
+  0%, 100% {
+    border-color: rgba(244, 63, 94, 0.8);
+    box-shadow: 0 0 20px rgba(244, 63, 94, 0.35);
+  }
+  50% {
+    border-color: rgba(244, 63, 94, 0.2);
+    box-shadow: 0 0 5px rgba(244, 63, 94, 0.1);
+  }
+}
