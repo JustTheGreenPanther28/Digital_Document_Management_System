@@ -1,8 +1,0 @@
-cd forensic-project
-echo "# Build artifacts
-backend/target/
-backend/.mvn/wrapper/
-frontend/node_modules/
-frontend/dist/
-.env
-*.log" > .gitignore

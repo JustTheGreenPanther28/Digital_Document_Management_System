@@ -38,18 +38,21 @@ spring:
 
 app:
   jwt:
-    secret: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
+    # REQUIRED — no default. Set via OCI Vault → /etc/forsic/.env → docker-compose env_file
+    secret: ${JWT_SECRET}
     access-token-expiration-ms: 900000 # 15 minutes
     refresh-token-expiration-ms: 604800000 # 7 days
     issuer: sih190-security-auth
     audience: ${JWT_AUDIENCE:sih190-api}
   kms:
-    master-key-base64: ${KMS_MASTER_KEY:YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXoxMjM0NTY=} # 32 bytes AES-256
+    # REQUIRED — no default. 32-byte AES-256 key, base64-encoded.
+    master-key-base64: ${KMS_MASTER_KEY}
     algorithm: AES-256-GCM
     key-id: kms-key-vault-primary
   pki:
     keystore-path: ${PKI_KEYSTORE_PATH:./storage_vault/pki/sih190-pki.p12}
-    keystore-password: ${PKI_KEYSTORE_PASSWORD:Sih190PkiPassword!2026}
+    # REQUIRED — no default.
+    keystore-password: ${PKI_KEYSTORE_PASSWORD}
   s3:
     endpoint: ${S3_ENDPOINT:http://localhost:9000}
     access-key: ${S3_ACCESS_KEY:minioadmin}

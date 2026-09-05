@@ -1,0 +1,14 @@
+# Normalize line endings
+* text=auto
+
+# Force LF for shell scripts and docker files (must run on Linux VM)
+*.sh text eol=lf
+Dockerfile text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+nginx.conf text eol=lf
+
+# Windows scripts use CRLF
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+*.bat text eol=crlf

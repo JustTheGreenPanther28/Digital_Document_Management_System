@@ -1,4 +1,9 @@
-# Multi-stage Dockerfile for React Frontend
+# ==============================================================================
+# Frontend Multi-Stage Dockerfile — React 18 + Nginx
+# TLS handled by host-level Let's Encrypt (certs mounted as volume in compose)
+# ==============================================================================
+
+# ---- Stage 1: Build React app ----
 FROM node:22-alpine AS builder
 WORKDIR /app
 
@@ -8,18 +13,13 @@ RUN npm ci
 COPY . ./
 RUN npm run build
 
-# Production static serving with Nginx & Self-Signed TLS fallback
+# ---- Stage 2: Serve with Nginx Alpine ----
 FROM nginx:1.27-alpine
 
-# Generate self-signed certificate for zero-configuration TLS startup
-RUN apk add --no-cache openssl && \
-    mkdir -p /etc/nginx/certs && \
-    openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-      -keyout /etc/nginx/certs/tls.key \
-      -out /etc/nginx/certs/tls.crt \
-      -subj "/CN=localhost/O=FORSIC/C=IN"
-
+# Copy built React SPA
 COPY --from=builder /app/dist /usr/share/nginx/html
+
+# Copy production nginx config (references Let's Encrypt paths via volume mount)
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80 443
