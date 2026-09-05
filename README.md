@@ -1,4 +1,4 @@
-# SIH Problem 190 — Secure Digital Case Management, Document Management & Evidence Chain-of-Custody System
+# Secure Digital Case Management, Document Management & Evidence Chain-of-Custody System
 
 [![Java 21](https://img.shields.io/badge/Java-21%20LTS-orange.svg)](https://openjdk.org/)
 [![Spring Boot 3.4.3](https://img.shields.io/badge/Spring%20Boot-3.4.3-brightgreen.svg)](https://spring.io/projects/spring-boot)
