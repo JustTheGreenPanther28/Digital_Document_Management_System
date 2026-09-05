@@ -7,7 +7,7 @@
 [![Vite](https://img.shields.io/badge/Vite-6.0-purple.svg)](https://vitejs.dev/)
 [![Security](https://img.shields.io/badge/Security-Zero--Trust%20%7C%20ABAC-red.svg)](#security-architecture)
 
-> **Official Implementation** conforming strictly to the architectural specifications, security criteria, and program flow defined for SIH Problem Statement 190.
+> **Official Implementation** conforming strictly to the architectural specifications, security criteria, and program flow defined
 
 ---
 
