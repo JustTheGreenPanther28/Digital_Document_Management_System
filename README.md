@@ -1,4 +1,4 @@
-# SIH Problem 190 — Secure Digital Case Management, Document Management & Evidence Chain-of-Custody System
+# Secure Digital Case Management, Document Management & Evidence Chain-of-Custody System
 
 [![Java 21](https://img.shields.io/badge/Java-21%20LTS-orange.svg)](https://openjdk.org/)
 [![Spring Boot 3.4.3](https://img.shields.io/badge/Spring%20Boot-3.4.3-brightgreen.svg)](https://spring.io/projects/spring-boot)
@@ -7,7 +7,7 @@
 [![Vite](https://img.shields.io/badge/Vite-6.0-purple.svg)](https://vitejs.dev/)
 [![Security](https://img.shields.io/badge/Security-Zero--Trust%20%7C%20ABAC-red.svg)](#security-architecture)
 
-> **Official Implementation** conforming strictly to the architectural specifications, security criteria, and program flow defined for SIH Problem Statement 190.
+> **Official Implementation** conforming strictly to the architectural specifications, security criteria, and program flow defined
 
 ---
 
@@ -198,6 +198,4 @@ sih190-case-management/
 ---
 
 ## 🛡️ License & Compliance
-
-Built for **Smart India Hackathon (SIH) — Problem 190**.  
 Compliant with Indian Evidence Act (Section 65B), ISO/IEC 27037 (Digital Evidence Handling), and NIST SP 800-53 security controls.
