@@ -198,6 +198,4 @@ sih190-case-management/
 ---
 
 ## 🛡️ License & Compliance
-
-Built for **Smart India Hackathon (SIH) — Problem 190**.  
 Compliant with Indian Evidence Act (Section 65B), ISO/IEC 27037 (Digital Evidence Handling), and NIST SP 800-53 security controls.
