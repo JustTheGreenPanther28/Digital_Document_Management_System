@@ -17,7 +17,7 @@
 set -euo pipefail
 
 # ---- UPDATE THIS LINE with your GitHub repo URL ----
-GITHUB_REPO="https://github.com/YOUR_ORG/YOUR_REPO.git"
+GITHUB_REPO="https://github.com/JustTheGreenPanther28/Secure_Digital_Document_Management_System-For_Legal_Investigation_Documents.git"
 
 DEPLOY_DIR="/opt/forsic"
 SECRETS_DIR="/etc/forsic"
