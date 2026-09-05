@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { 
@@ -14,14 +15,16 @@ import {
   ArrowRight, 
   Shield, 
   Layers, 
-  Sparkles,
-  Clock,
-  User,
-  Radio,
-  ExternalLink,
-  Check,
-  Cpu,
-  Globe
+  Sparkles, 
+  Clock, 
+  User, 
+  Radio, 
+  ExternalLink, 
+  Check, 
+  Cpu, 
+  Globe,
+  Briefcase,
+  ShieldAlert
 } from 'lucide-react';
 
 const FALLBACK_AUDIT_LOGS = [
@@ -67,7 +70,8 @@ const FALLBACK_AUDIT_LOGS = [
 ];
 
 export const AuditLedgerPage = () => {
-  const { user } = useAuth();
+  const { user, hasRole } = useAuth();
+  const navigate = useNavigate();
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -77,9 +81,15 @@ export const AuditLedgerPage = () => {
   const [selectedEventType, setSelectedEventType] = useState('ALL');
   const [copiedHash, setCopiedHash] = useState('');
 
+  const isAuthorizedAuditor = hasRole('AUDITOR') || hasRole('ADMIN') || hasRole('SENIOR_OFFICER');
+
   useEffect(() => {
-    loadLedger();
-  }, []);
+    if (isAuthorizedAuditor) {
+      loadLedger();
+    } else {
+      setLoading(false);
+    }
+  }, [user]);
 
   const loadLedger = async () => {
     setLoading(true);
@@ -182,6 +192,59 @@ export const AuditLedgerPage = () => {
 
     return matchesSearch && matchesType;
   });
+
+  if (!isAuthorizedAuditor) {
+    return (
+      <div className="obsidian-card p-8 sm:p-10 rounded-3xl border border-rose-500/40 text-center space-y-6 max-w-xl mx-auto mt-12 select-none shadow-[0_20px_50px_rgba(244,63,94,0.18)] bg-[#0B0D17]">
+        <div className="w-16 h-16 rounded-3xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center mx-auto text-rose-400 shadow-lg shadow-rose-500/20">
+          <ShieldAlert className="w-8 h-8" />
+        </div>
+
+        <div className="space-y-2">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-500/10 border border-rose-500/30 text-rose-400 text-[10px] font-mono font-bold uppercase tracking-wider">
+            <Lock className="w-3 h-3" />
+            <span>403 FORBIDDEN • AUDIT LEDGER RESTRICTION</span>
+          </div>
+          <h2 className="text-xl font-bold text-white tracking-tight">
+            Compliance Auditor Privilege Required
+          </h2>
+          <p className="text-xs text-slate-300 leading-relaxed max-w-md mx-auto">
+            Under Section 65B of the Indian Evidence Act and ISO/IEC 27037 forensic standards, access to the Master Cryptographic Audit Ledger & Tamper Detection Engine is restricted exclusively to accredited System Auditors, Security Compliance Officers, and Senior Supervisory Command.
+          </p>
+        </div>
+
+        {/* Security Policy Audit Context */}
+        <div className="p-4 rounded-2xl bg-[#121524] border border-white/[0.06] text-[11px] font-mono space-y-2 text-left">
+          <div className="flex justify-between items-center text-slate-400">
+            <span>Attempted By:</span>
+            <span className="text-white font-bold">@{user?.username} ({user?.fullName || 'Officer'})</span>
+          </div>
+          <div className="flex justify-between items-center text-slate-400">
+            <span>Active Roles:</span>
+            <span className="text-amber-400 font-bold">{user?.roles?.join(', ') || 'INVESTIGATOR'}</span>
+          </div>
+          <div className="flex justify-between items-center text-slate-400">
+            <span>Required Role Authority:</span>
+            <span className="text-cyan-400 font-bold">AUDITOR | ADMIN | SENIOR_OFFICER</span>
+          </div>
+          <div className="flex justify-between items-center text-slate-400">
+            <span>Compliance Policy Decision:</span>
+            <span className="text-rose-400 font-bold">ACCESS BLOCKED (UNAUTHORIZED PERSONA)</span>
+          </div>
+        </div>
+
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+          <button
+            onClick={() => navigate('/dashboard')}
+            className="w-full sm:w-auto px-6 py-2.5 rounded-full bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold shadow-lg shadow-violet-600/30 transition flex items-center justify-center gap-2"
+          >
+            <Briefcase className="w-4 h-4" />
+            <span>Return to Dashboard</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 select-none max-w-7xl mx-auto">

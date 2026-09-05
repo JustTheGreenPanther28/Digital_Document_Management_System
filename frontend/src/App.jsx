@@ -18,6 +18,47 @@ import { RolesAdminPage } from './pages/RolesAdminPage';
 import { SecurityAlertsPage } from './pages/SecurityAlertsPage';
 import { RetentionDisposalPage } from './pages/RetentionDisposalPage';
 
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error('App Error caught by ErrorBoundary:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-8 rounded-3xl bg-[#121524] border border-rose-500/30 text-center space-y-4 max-w-xl mx-auto my-12">
+          <div className="w-12 h-12 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center mx-auto text-rose-400 font-bold text-lg">
+            !
+          </div>
+          <h2 className="text-base font-bold text-white">Something went wrong rendering this view</h2>
+          <p className="text-xs text-slate-400 font-mono">
+            {this.state.error?.message || 'An unexpected error occurred.'}
+          </p>
+          <button
+            onClick={() => {
+              this.setState({ hasError: false, error: null });
+              window.location.reload();
+            }}
+            className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-xs font-semibold text-white transition cursor-pointer"
+          >
+            Reload View
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 const ProtectedLayout = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
 
@@ -39,7 +80,9 @@ const ProtectedLayout = ({ children }) => {
       <div className="flex flex-1">
         <Sidebar />
         <main className="flex-1 p-5 md:p-6 overflow-y-auto max-w-7xl mx-auto w-full">
-          {children}
+          <ErrorBoundary>
+            {children}
+          </ErrorBoundary>
         </main>
       </div>
     </div>

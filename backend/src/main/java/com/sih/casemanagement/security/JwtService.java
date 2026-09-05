@@ -35,11 +35,13 @@ public class JwtService {
         @Value("${app.jwt.audience:sih190-api}") String audience,
         RedisTokenBlacklistService redisTokenBlacklistService
     ) {
-        byte[] keyBytes = secret.getBytes(StandardCharsets.UTF_8);
-        if (keyBytes.length < 32) {
-            byte[] padded = new byte[32];
-            System.arraycopy(keyBytes, 0, padded, 0, Math.min(keyBytes.length, 32));
-            keyBytes = padded;
+        byte[] rawBytes = secret.getBytes(StandardCharsets.UTF_8);
+        byte[] keyBytes;
+        try {
+            java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+            keyBytes = digest.digest(rawBytes);
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 digest algorithm not available", e);
         }
         this.signingKey = Keys.hmacShaKeyFor(keyBytes);
         this.accessTokenExpirationMs = accessTokenExpirationMs;

@@ -15,6 +15,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
@@ -37,6 +38,7 @@ public class EvidenceController {
     }
 
     @PostMapping("/cases/{caseId}/evidence")
+    @PreAuthorize("hasAnyRole('INVESTIGATOR', 'EVIDENCE_CUSTODIAN', 'FORENSIC_OFFICER', 'SENIOR_OFFICER', 'ADMIN')")
     public ResponseEntity<Evidence> registerEvidence(
         @PathVariable UUID caseId,
         @Valid @RequestBody RegisterEvidenceRequest request,
@@ -63,6 +65,7 @@ public class EvidenceController {
     }
 
     @GetMapping("/cases/{caseId}/evidence")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<List<Evidence>> getEvidenceForCase(
         @PathVariable UUID caseId
     ) {
@@ -70,6 +73,7 @@ public class EvidenceController {
     }
 
     @PostMapping("/evidence/{evidenceId}/transfer-request")
+    @PreAuthorize("hasAnyRole('INVESTIGATOR', 'EVIDENCE_CUSTODIAN', 'FORENSIC_OFFICER', 'SENIOR_OFFICER', 'ADMIN')")
     public ResponseEntity<EvidenceTransfer> requestTransfer(
         @PathVariable UUID evidenceId,
         @Valid @RequestBody TransferRequestDto request,
@@ -89,6 +93,7 @@ public class EvidenceController {
     }
 
     @PostMapping("/evidence/transfers/{transferId}/accept")
+    @PreAuthorize("hasAnyRole('INVESTIGATOR', 'EVIDENCE_CUSTODIAN', 'FORENSIC_OFFICER', 'SENIOR_OFFICER', 'ADMIN')")
     public ResponseEntity<Map<String, String>> acceptTransfer(
         @PathVariable UUID transferId,
         @RequestBody AcceptTransferRequest request,
@@ -107,6 +112,7 @@ public class EvidenceController {
     }
 
     @PostMapping("/evidence/transfers/{transferId}/reject")
+    @PreAuthorize("hasAnyRole('INVESTIGATOR', 'EVIDENCE_CUSTODIAN', 'FORENSIC_OFFICER', 'SENIOR_OFFICER', 'ADMIN')")
     public ResponseEntity<Map<String, String>> rejectTransfer(
         @PathVariable UUID transferId,
         @RequestBody Map<String, String> body,
@@ -120,6 +126,7 @@ public class EvidenceController {
     }
 
     @GetMapping("/evidence/{evidenceId}/custody")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<List<CustodyRecord>> getCustodyHistory(
         @PathVariable UUID evidenceId
     ) {
@@ -127,6 +134,7 @@ public class EvidenceController {
     }
 
     @GetMapping("/evidence/transfers/pending")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<List<EvidenceTransfer>> getPendingTransfers(
         @AuthenticationPrincipal UserPrincipal principal
     ) {

@@ -13,6 +13,9 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+import java.util.HashMap;
+import java.util.Map;
+
 @Service
 public class ProsecutionAndCourtService {
 
@@ -24,6 +27,7 @@ public class ProsecutionAndCourtService {
     private final CaseRepository caseRepository;
     private final EvidenceRepository evidenceRepository;
     private final DocumentRepository documentRepository;
+    private final CustodyRecordRepository custodyRecordRepository;
     private final DigitalSignatureService digitalSignatureService;
     private final CaseService caseService;
     private final AuditService auditService;
@@ -38,6 +42,7 @@ public class ProsecutionAndCourtService {
         CaseRepository caseRepository,
         EvidenceRepository evidenceRepository,
         DocumentRepository documentRepository,
+        CustodyRecordRepository custodyRecordRepository,
         DigitalSignatureService digitalSignatureService,
         CaseService caseService,
         AuditService auditService,
@@ -51,6 +56,7 @@ public class ProsecutionAndCourtService {
         this.caseRepository = caseRepository;
         this.evidenceRepository = evidenceRepository;
         this.documentRepository = documentRepository;
+        this.custodyRecordRepository = custodyRecordRepository;
         this.digitalSignatureService = digitalSignatureService;
         this.caseService = caseService;
         this.auditService = auditService;
@@ -387,5 +393,39 @@ public class ProsecutionAndCourtService {
     public Judgment getJudgmentForCase(UUID caseId) {
         abacSecurity.checkCaseAccess(caseId, "READ");
         return judgmentRepository.findByACaseId(caseId).orElse(null);
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> getPreTrialBundle(UUID caseId) {
+        abacSecurity.checkCaseAccess(caseId, "READ");
+        Case aCase = caseRepository.findById(caseId)
+            .orElseThrow(() -> new ResourceNotFoundException("Case not found: " + caseId));
+        List<Document> docs = documentRepository.findByACaseId(caseId);
+        List<Evidence> evidenceList = evidenceRepository.findByACaseId(caseId);
+        List<ForensicReport> reports = forensicReportRepository.findByACaseId(caseId);
+        List<CourtFiling> filings = courtFilingRepository.findByACaseId(caseId);
+        List<CourtProceeding> proceedings = courtProceedingRepository.findByACaseIdOrderByHearingDateAsc(caseId);
+        List<CustodyRecord> custodyRecords = custodyRecordRepository.findByACaseIdOrderByTimestampAsc(caseId);
+        ChargeSheet chargeSheet = chargeSheetRepository.findByACaseId(caseId).orElse(null);
+        Judgment judgment = judgmentRepository.findByACaseId(caseId).orElse(null);
+
+        Map<String, Object> bundle = new HashMap<>();
+        bundle.put("caseId", aCase.getId());
+        bundle.put("caseNumber", aCase.getCaseNumber());
+        bundle.put("title", aCase.getTitle());
+        bundle.put("status", aCase.getStatus());
+        bundle.put("classificationLevel", aCase.getClassification() != null ? aCase.getClassification().name() : "CONFIDENTIAL");
+        bundle.put("description", aCase.getDescription());
+        bundle.put("evidenceDocuments", docs);
+        bundle.put("physicalEvidence", evidenceList);
+        bundle.put("forensicReports", reports);
+        bundle.put("chargeSheet", chargeSheet);
+        bundle.put("courtFilings", filings);
+        bundle.put("proceedings", proceedings);
+        bundle.put("custodyTransferLog", custodyRecords);
+        bundle.put("judgment", judgment);
+        bundle.put("compiledAt", Instant.now().toString());
+        bundle.put("section65bCertified", true);
+        return bundle;
     }
 }

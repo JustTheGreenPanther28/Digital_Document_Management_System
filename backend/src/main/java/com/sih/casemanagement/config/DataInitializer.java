@@ -64,7 +64,7 @@ public class DataInitializer implements CommandLineRunner {
     }
 
     private void ensureUsers() {
-        String defaultPassword = passwordEncoder.encode("Password@123");
+        String defaultPassword = passwordEncoder.encode("kirtan@123");
 
         createUserIfAbsent("admin", "admin@demo.local", defaultPassword, "Central System Administrator",
             "ADMIN-001", "Security IT", SecurityClearance.TOP_SECRET, RoleType.ADMIN);

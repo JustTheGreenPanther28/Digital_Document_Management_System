@@ -190,4 +190,14 @@ public class ProsecutionAndCourtController {
     public ResponseEntity<Judgment> getJudgment(@PathVariable UUID caseId) {
         return ResponseEntity.ok(prosecutionService.getJudgmentForCase(caseId));
     }
+
+    @GetMapping("/court/cases/{caseId}/bundle")
+    public ResponseEntity<Map<String, Object>> getPreTrialBundle(@PathVariable UUID caseId) {
+        return ResponseEntity.ok(prosecutionService.getPreTrialBundle(caseId));
+    }
+
+    @GetMapping("/court/cases/{caseId}/hearings")
+    public ResponseEntity<List<CourtProceeding>> getCourtHearings(@PathVariable UUID caseId) {
+        return ResponseEntity.ok(prosecutionService.getProceedingsForCase(caseId));
+    }
 }

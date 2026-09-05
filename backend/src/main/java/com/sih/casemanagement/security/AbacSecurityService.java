@@ -73,6 +73,16 @@ public class AbacSecurityService {
             return false;
         }
 
+        // Enforce Read-Only if case is CLOSED or ARCHIVED (No modifications allowed even for Admin/Senior Officer)
+        if (aCase.getStatus().isReadOnly() && !"READ".equalsIgnoreCase(action)) {
+            // Only status transition from CLOSED -> ARCHIVED is structurally permitted
+            if (aCase.getStatus() == com.sih.casemanagement.common.enums.CaseStatus.CLOSED && "UPDATE_STATUS".equalsIgnoreCase(action)) {
+                // Allowed to proceed to status transition check
+            } else {
+                throw new WorkflowViolationException("Case " + aCase.getCaseNumber() + " is " + aCase.getStatus() + " and is locked read-only. Modification is forbidden.");
+            }
+        }
+
         if (isAdmin || isSeniorOfficer) {
             return true;
         }
@@ -80,11 +90,6 @@ public class AbacSecurityService {
         if (isAuditor) {
             // Auditor has read-only access for compliance
             return "READ".equalsIgnoreCase(action);
-        }
-
-        // Enforce Read-Only if case is CLOSED or ARCHIVED
-        if (aCase.getStatus().isReadOnly() && !"READ".equalsIgnoreCase(action)) {
-            throw new WorkflowViolationException("Case " + aCase.getCaseNumber() + " is CLOSED/ARCHIVED and cannot be modified.");
         }
 
         // ABAC Check: User must have an active assignment to this case

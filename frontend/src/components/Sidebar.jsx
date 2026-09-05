@@ -39,8 +39,8 @@ export const Sidebar = () => {
   ];
 
   const forensicLinks = [
-    { name: 'Audit & Custody Ledger', path: '/audit', icon: FileCode2 },
-    { name: 'Threat Alerts', path: '/security-alerts', icon: ShieldAlert, badge: '2' },
+    { name: 'Audit & Custody Ledger', path: '/audit', icon: FileCode2, auditorOnly: true },
+    { name: 'Threat Alerts', path: '/security-alerts', icon: ShieldAlert, badge: '2', auditorOnly: true },
     { name: 'Retention & Disposal', path: '/retention-disposal', icon: Archive },
     { name: 'Global Search', path: '/search', icon: Search },
     { name: 'User Directory', path: '/admin/users', icon: Users, adminOnly: true },
@@ -48,7 +48,11 @@ export const Sidebar = () => {
   ];
 
   const activeLinks = activeTab === 'operations' ? operationLinks : forensicLinks;
-  const visibleLinks = activeLinks.filter(l => !l.adminOnly || hasRole('ADMIN') || hasRole('SENIOR_OFFICER'));
+  const visibleLinks = activeLinks.filter(l => {
+    if (l.adminOnly) return hasRole('ADMIN') || hasRole('SENIOR_OFFICER');
+    if (l.auditorOnly) return hasRole('AUDITOR') || hasRole('ADMIN') || hasRole('SENIOR_OFFICER');
+    return true;
+  });
 
   // Featured Active Priority Case Cards (matching Active Staking section on left rail)
   const activeCasesSummary = [

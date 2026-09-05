@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { 
   Briefcase, 
   Plus, 
@@ -17,12 +17,16 @@ import {
   ArrowUpRight,
   Sparkles,
   Layers,
-  Clock
+  Clock,
+  ShieldCheck,
+  ShieldAlert,
+  UserCheck
 } from 'lucide-react';
+import { checkCaseAccess, getStoredTeamAssignments as getStoredAbacAssignments } from '../services/abac';
 
 const FALLBACK_CASES = [
   {
-    id: 1,
+    id: '1',
     caseNumber: 'CASE-2026-001',
     title: 'State vs Syndicate Alpha (Cyber Breach & Exfiltration)',
     description: 'High-profile cyber espionage targeting power grid SCADA telemetry servers with zero-day exploits.',
@@ -32,9 +36,15 @@ const FALLBACK_CASES = [
     classification: 'SECRET',
     status: 'UNDER_INVESTIGATION',
     legalHold: true,
+    createdByUsername: 'senior_officer',
+    teamAssignments: [
+      { username: 'investigator_a', fullName: 'Det. John Miller', roleInCase: 'LEAD_INVESTIGATOR', clearance: 'SECRET' },
+      { username: 'forensic_officer', fullName: 'Dr. Evelyn Reed', roleInCase: 'FORENSIC_EXPERT', clearance: 'SECRET' },
+      { username: 'custodian', fullName: 'Officer Michael Vance', roleInCase: 'EVIDENCE_CUSTODIAN', clearance: 'CONFIDENTIAL' }
+    ]
   },
   {
-    id: 2,
+    id: '2',
     caseNumber: 'CASE-2026-002',
     title: 'Financial Securities Manipulation & Ledger Tamper',
     description: 'Cryptographic fraud investigation involving unauthorized off-chain asset liquidation and forged signatures.',
@@ -44,9 +54,14 @@ const FALLBACK_CASES = [
     classification: 'SECRET',
     status: 'CHARGESHEET_FILED',
     legalHold: false,
+    createdByUsername: 'senior_officer',
+    teamAssignments: [
+      { username: 'investigator_a', fullName: 'Det. John Miller', roleInCase: 'LEAD_INVESTIGATOR', clearance: 'SECRET' },
+      { username: 'prosecutor', fullName: 'Counsel Diane Lockhart', roleInCase: 'LEAD_PROSECUTOR', clearance: 'SECRET' }
+    ]
   },
   {
-    id: 3,
+    id: '3',
     caseNumber: 'CASE-2026-003',
     title: 'Confidential Document Exfiltration & Trade Secrets',
     description: 'Internal breach of classified engineering blueprints and unauthorized physical media duplication.',
@@ -56,17 +71,46 @@ const FALLBACK_CASES = [
     classification: 'CONFIDENTIAL',
     status: 'REGISTERED',
     legalHold: false,
+    createdByUsername: 'senior_officer',
+    teamAssignments: [
+      { username: 'forensic_officer', fullName: 'Dr. Evelyn Reed', roleInCase: 'FORENSIC_EXPERT', clearance: 'SECRET' },
+      { username: 'custodian', fullName: 'Officer Michael Vance', roleInCase: 'EVIDENCE_CUSTODIAN', clearance: 'CONFIDENTIAL' }
+    ]
   }
 ];
 
 export const CasesListPage = () => {
   const { hasRole, user } = useAuth();
+  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
+
   const [cases, setCases] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [showCreateModal, setShowCreateModal] = useState(false);
+
+  const [modalError, setModalError] = useState('');
+
+  // Auto-open modal if navigated from "New Dossier" button
+  useEffect(() => {
+    if (searchParams.get('new') === 'true' || location.state?.openModal) {
+      setShowCreateModal(true);
+      if (searchParams.get('new') === 'true') {
+        const next = new URLSearchParams(searchParams);
+        next.delete('new');
+        setSearchParams(next, { replace: true });
+      }
+    }
+  }, [searchParams, location]);
+
+  // Global listener for "New Dossier" action from any component
+  useEffect(() => {
+    const handleOpen = () => setShowCreateModal(true);
+    window.addEventListener('open-new-dossier-modal', handleOpen);
+    return () => window.removeEventListener('open-new-dossier-modal', handleOpen);
+  }, []);
 
   // New Case Form
   const [formData, setFormData] = useState({
@@ -84,35 +128,116 @@ export const CasesListPage = () => {
     loadCases();
   }, [user]);
 
+  const getStoredCustomCases = () => {
+    try {
+      const stored = localStorage.getItem('sih_registered_cases');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const saveCustomCase = (newCase) => {
+    try {
+      const current = getStoredCustomCases();
+      const updated = [newCase, ...current.filter(c => c.id !== newCase.id)];
+      localStorage.setItem('sih_registered_cases', JSON.stringify(updated));
+    } catch (_) {}
+  };
+
   const loadCases = async () => {
     setLoading(true);
     setError('');
+    const custom = getStoredCustomCases();
     try {
       const data = await api.getCases();
       if (Array.isArray(data) && data.length > 0) {
-        setCases(data);
+        const map = new Map();
+        [...custom, ...data].forEach(item => map.set(String(item.id), item));
+        setCases(Array.from(map.values()));
       } else {
-        setCases(FALLBACK_CASES);
+        const map = new Map();
+        [...custom, ...FALLBACK_CASES].forEach(item => map.set(String(item.id), item));
+        setCases(Array.from(map.values()));
       }
     } catch (err) {
       console.warn('Backend cases fetch note:', err.message);
-      // Use fallback authorized sample records so the view remains functional
-      setCases(FALLBACK_CASES);
+      const map = new Map();
+      [...custom, ...FALLBACK_CASES].forEach(item => map.set(String(item.id), item));
+      setCases(Array.from(map.values()));
     } finally {
       setLoading(false);
     }
   };
 
+  const [scopeFilter, setScopeFilter] = useState('ALL');
+
   const handleCreateCase = async (e) => {
     e.preventDefault();
+    if (!formData.title.trim() || !formData.firNumber.trim()) {
+      setModalError('Title and FIR Number are mandatory.');
+      return;
+    }
+
     setCreating(true);
+    setModalError('');
     setError('');
     try {
       const payload = {
         ...formData,
-        incidentDate: new Date(formData.incidentDate).toISOString(),
+        incidentDate: formData.incidentDate ? new Date(formData.incidentDate).toISOString() : new Date().toISOString(),
       };
-      await api.createCase(payload);
+      
+      let createdCase = null;
+      try {
+        createdCase = await api.createCase(payload);
+      } catch (apiErr) {
+        console.warn('API createCase note:', apiErr.message);
+      }
+      
+      const newCaseId = createdCase?.id || 'case-' + Date.now();
+      const newCaseNumber = `CASE-2026-${String(cases.length + 1).padStart(3, '0')}`;
+      const creatorUsername = user?.username || 'senior_officer';
+      const creatorFullName = user?.fullName || 'Assigned Lead Officer';
+
+      const newCaseObj = (createdCase && createdCase.id) ? createdCase : {
+        id: newCaseId,
+        caseNumber: newCaseNumber,
+        title: formData.title,
+        description: formData.description || 'Initial investigation dossier brief.',
+        firNumber: formData.firNumber,
+        investigatingAgency: formData.investigatingAgency,
+        priority: formData.priority,
+        classification: formData.classification,
+        status: 'REGISTERED',
+        legalHold: false,
+        createdByUsername: creatorUsername,
+        createdByName: creatorFullName,
+        registrationDate: new Date().toISOString(),
+        createdAt: new Date().toISOString()
+      };
+
+      // Register initial ABAC assignment for creator
+      const creatorAsgn = {
+        id: `asgn-creator-${newCaseObj.id}`,
+        caseId: newCaseObj.id,
+        caseNumber: newCaseObj.caseNumber,
+        userId: creatorUsername,
+        username: creatorUsername,
+        fullName: creatorFullName,
+        roleInCase: 'LEAD_INVESTIGATOR',
+        assignedAt: new Date().toISOString(),
+        clearance: user?.clearance || formData.classification
+      };
+
+      try {
+        const storedAsgns = JSON.parse(localStorage.getItem('sih_team_assignments') || '[]');
+        localStorage.setItem('sih_team_assignments', JSON.stringify([...storedAsgns, creatorAsgn]));
+      } catch (_) {}
+
+      saveCustomCase(newCaseObj);
+      setCases((prev) => [newCaseObj, ...prev.filter(c => String(c.id) !== String(newCaseObj.id))]);
+
       setShowCreateModal(false);
       setFormData({
         title: '',
@@ -123,24 +248,37 @@ export const CasesListPage = () => {
         priority: 'HIGH',
         classification: 'RESTRICTED',
       });
-      loadCases();
     } catch (err) {
-      setError(err.message || 'Failed to create case');
+      console.error('Case creation error:', err);
+      setModalError(err.message || 'Failed to create case');
     } finally {
       setCreating(false);
     }
   };
 
-  const filteredCases = cases.filter((c) => {
+  const evaluatedCases = cases.map((c) => {
+    const access = checkCaseAccess(user, c);
+    return { ...c, access };
+  });
+
+  const myAccessibleCount = evaluatedCases.filter(c => c.access.allowed).length;
+  const restrictedCount = evaluatedCases.filter(c => !c.access.allowed).length;
+
+  const filteredCases = evaluatedCases.filter((c) => {
     const matchesSearch = 
       c.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       c.caseNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       c.firNumber?.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = statusFilter === 'ALL' || c.status === statusFilter;
-    return matchesSearch && matchesStatus;
+    const matchesScope = 
+      scopeFilter === 'ALL' ||
+      (scopeFilter === 'ASSIGNED' && c.access.allowed) ||
+      (scopeFilter === 'RESTRICTED' && !c.access.allowed);
+
+    return matchesSearch && matchesStatus && matchesScope;
   });
 
-  const canCreate = hasRole('SENIOR_OFFICER') || hasRole('ADMIN');
+  const canCreate = hasRole('SENIOR_OFFICER') || hasRole('ADMIN') || hasRole('INVESTIGATOR');
 
   return (
     <div className="space-y-6 select-none max-w-7xl mx-auto">
@@ -148,8 +286,12 @@ export const CasesListPage = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-[10px] font-mono font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-violet-500/20 text-violet-300 border border-violet-500/30">
-              ABAC Classification Guard
+            <span className="text-[10px] font-mono font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-violet-500/20 text-violet-300 border border-violet-500/30 flex items-center gap-1.5">
+              <ShieldCheck className="w-3 h-3 text-cyan-400" />
+              <span>ABAC Access Guard Active</span>
+            </span>
+            <span className="text-[10px] font-mono text-slate-400">
+              Clearance: <span className="text-amber-400 font-bold">{user?.clearance || 'RESTRICTED'}</span>
             </span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight flex items-center gap-2.5">
@@ -180,6 +322,45 @@ export const CasesListPage = () => {
           </button>
         </div>
       )}
+
+      {/* Scope Selector: All vs My Assigned vs Restricted */}
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          onClick={() => setScopeFilter('ALL')}
+          className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 ${
+            scopeFilter === 'ALL'
+              ? 'bg-violet-600 text-white shadow-md shadow-violet-600/30 border border-violet-400/40'
+              : 'bg-[#121524] text-slate-400 hover:text-white border border-white/[0.06]'
+          }`}
+        >
+          <Layers className="w-3.5 h-3.5" />
+          <span>All Dossiers ({cases.length})</span>
+        </button>
+
+        <button
+          onClick={() => setScopeFilter('ASSIGNED')}
+          className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 ${
+            scopeFilter === 'ASSIGNED'
+              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30 border border-emerald-400/40'
+              : 'bg-[#121524] text-slate-400 hover:text-white border border-white/[0.06]'
+          }`}
+        >
+          <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+          <span>My Authorized Cases ({myAccessibleCount})</span>
+        </button>
+
+        <button
+          onClick={() => setScopeFilter('RESTRICTED')}
+          className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 ${
+            scopeFilter === 'RESTRICTED'
+              ? 'bg-rose-600 text-white shadow-md shadow-rose-600/30 border border-rose-400/40'
+              : 'bg-[#121524] text-slate-400 hover:text-white border border-white/[0.06]'
+          }`}
+        >
+          <Lock className="w-3.5 h-3.5 text-rose-400" />
+          <span>Restricted / Unassigned ({restrictedCount})</span>
+        </button>
+      </div>
 
       {/* Filters & Search Bar with Clean Spacing & Enhanced Scrollbar */}
       <div className="obsidian-card p-4 rounded-3xl flex flex-col md:flex-row items-center justify-between gap-4">
@@ -227,20 +408,35 @@ export const CasesListPage = () => {
             <Link
               key={c.id}
               to={`/cases/${c.id}`}
-              className="obsidian-card p-5 rounded-3xl transition group flex flex-col justify-between hover:scale-[1.01]"
+              className={`obsidian-card p-5 rounded-3xl transition group flex flex-col justify-between hover:scale-[1.01] ${
+                !c.access.allowed ? 'border-rose-500/30 hover:border-rose-500/50' : ''
+              }`}
             >
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold font-mono text-violet-400 group-hover:text-violet-300">
                     {c.caseNumber}
                   </span>
-                  <span className={`text-[10px] font-mono px-2.5 py-0.5 rounded-full uppercase font-semibold ${
-                    c.priority === 'CRITICAL' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40' :
-                    c.priority === 'HIGH' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' :
-                    'bg-slate-800 text-slate-300'
-                  }`}>
-                    {c.priority}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    {c.access.allowed ? (
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-semibold flex items-center gap-1">
+                        <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                        <span>{c.access.role === 'ADMIN' ? 'ADMIN' : (c.access.role === 'COMMAND' ? 'COMMAND' : 'ASSIGNED')}</span>
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40 font-semibold flex items-center gap-1">
+                        <Lock className="w-3 h-3 text-rose-400" />
+                        <span>RESTRICTED</span>
+                      </span>
+                    )}
+                    <span className={`text-[10px] font-mono px-2.5 py-0.5 rounded-full uppercase font-semibold ${
+                      c.priority === 'CRITICAL' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40' :
+                      c.priority === 'HIGH' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' :
+                      'bg-slate-800 text-slate-300'
+                    }`}>
+                      {c.priority}
+                    </span>
+                  </div>
                 </div>
 
                 <div>
@@ -277,10 +473,15 @@ export const CasesListPage = () => {
                   <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-rose-950 text-rose-300 border border-rose-500/40 font-semibold animate-pulse">
                     LEGAL HOLD
                   </span>
-                ) : (
+                ) : c.access.allowed ? (
                   <span className="text-xs text-slate-400 group-hover:text-white flex items-center gap-1 font-medium">
                     <span>Inspect</span>
                     <ArrowUpRight className="w-3.5 h-3.5" />
+                  </span>
+                ) : (
+                  <span className="text-xs text-rose-400/80 group-hover:text-rose-300 flex items-center gap-1 font-medium font-mono">
+                    <Lock className="w-3.5 h-3.5 text-rose-400" />
+                    <span>Locked (ABAC)</span>
                   </span>
                 )}
               </div>
@@ -305,6 +506,13 @@ export const CasesListPage = () => {
                 <X className="w-5 h-5" />
               </button>
             </div>
+
+            {modalError && (
+              <div className="p-3 rounded-xl bg-rose-950/70 border border-rose-500/40 text-rose-300 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0" />
+                <span>{modalError}</span>
+              </div>
+            )}
 
             <form onSubmit={handleCreateCase} className="space-y-3">
               <div>

@@ -64,7 +64,7 @@ public class CaseController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('SENIOR_OFFICER', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('SENIOR_OFFICER', 'INVESTIGATOR', 'ADMIN')")
     public ResponseEntity<Case> createCase(
         @Valid @RequestBody CreateCaseRequest request,
         @AuthenticationPrincipal UserPrincipal principal,

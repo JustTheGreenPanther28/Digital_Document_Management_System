@@ -31,14 +31,6 @@ async function request(endpoint, options = {}) {
     headers,
   });
 
-  if (res.status === 401) {
-    if (!window.location.pathname.includes('/login')) {
-      clearAuthToken();
-      clearStoredUser();
-      window.location.href = '/login';
-    }
-  }
-
   if (!res.ok) {
     let errorMessage = `Request failed with status ${res.status}`;
     try {
@@ -93,6 +85,13 @@ export const api = {
 
   // Cases
   getCases: () => request('/cases'),
+  search: async (q) => {
+    try {
+      return await request(`/cases?search=${encodeURIComponent(q)}`);
+    } catch (_) {
+      return [];
+    }
+  },
   getCaseDetails: (id) => request(`/cases/${id}`),
   createCase: (data) => request('/cases', {
     method: 'POST',
@@ -120,8 +119,8 @@ export const api = {
   }),
 
   // Documents
-  getCaseDocuments: (caseId) => request(`/documents/case/${caseId}`),
-  uploadDocument: (caseId, formData) => request(`/documents/case/${caseId}/upload`, {
+  getCaseDocuments: (caseId) => request(`/cases/${caseId}/documents`),
+  uploadDocument: (caseId, formData) => request(`/cases/${caseId}/documents`, {
     method: 'POST',
     body: formData,
   }),
@@ -142,12 +141,12 @@ export const api = {
   }),
 
   // Evidence & Custody
-  getCaseEvidence: (caseId) => request(`/evidence/case/${caseId}`),
-  registerEvidence: (caseId, data) => request(`/evidence/case/${caseId}`, {
+  getCaseEvidence: (caseId) => request(`/cases/${caseId}/evidence`),
+  registerEvidence: (caseId, data) => request(`/cases/${caseId}/evidence`, {
     method: 'POST',
     body: JSON.stringify(data),
   }),
-  initiateCustodyTransfer: (evidenceId, data) => request(`/evidence/${evidenceId}/transfer`, {
+  initiateCustodyTransfer: (evidenceId, data) => request(`/evidence/${evidenceId}/transfer-request`, {
     method: 'POST',
     body: JSON.stringify(data),
   }),
@@ -155,7 +154,7 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ verificationNotes }),
   }),
-  getCustodyTimeline: (evidenceId) => request(`/evidence/${evidenceId}/custody-timeline`),
+  getCustodyTimeline: (evidenceId) => request(`/evidence/${evidenceId}/custody`),
   getPendingTransfers: () => request('/evidence/transfers/pending'),
 
   // Prosecution & Court

@@ -19,14 +19,25 @@ public class KeyManagementService {
         @Value("${app.kms.master-key-base64:YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXoxMjM0NTY=}") String masterKeyBase64,
         @Value("${app.kms.key-id:kms-key-vault-primary}") String keyId
     ) {
-        byte[] decodedKey = Base64.getDecoder().decode(masterKeyBase64);
-        if (decodedKey.length != 32) {
-            // Ensure 256-bit key
-            byte[] padded = new byte[32];
-            System.arraycopy(decodedKey, 0, padded, 0, Math.min(decodedKey.length, 32));
-            decodedKey = padded;
+        byte[] rawKey;
+        try {
+            rawKey = Base64.getDecoder().decode(masterKeyBase64);
+        } catch (IllegalArgumentException e) {
+            rawKey = masterKeyBase64.getBytes(java.nio.charset.StandardCharsets.UTF_8);
         }
-        this.masterKey = new SecretKeySpec(decodedKey, "AES");
+
+        byte[] keyBytes;
+        if (rawKey.length == 32) {
+            keyBytes = rawKey;
+        } else {
+            try {
+                java.security.MessageDigest sha256 = java.security.MessageDigest.getInstance("SHA-256");
+                keyBytes = sha256.digest(rawKey);
+            } catch (java.security.NoSuchAlgorithmException e) {
+                throw new IllegalStateException("SHA-256 not available", e);
+            }
+        }
+        this.masterKey = new SecretKeySpec(keyBytes, "AES");
         this.keyId = keyId;
     }
 

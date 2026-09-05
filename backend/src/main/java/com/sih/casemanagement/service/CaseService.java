@@ -114,17 +114,24 @@ public class CaseService {
         CaseUserAssignment assignment = new CaseUserAssignment(aCase, targetUser, roleInCase, assigner);
         CaseUserAssignment saved = assignmentRepository.save(assignment);
 
+        String assignerRole = assigner.getRoles().isEmpty() ? "OFFICER" : assigner.getRoles().iterator().next().getName().name();
+
         auditService.logEvent(
             AuditEventType.CASE_ASSIGNED,
             assigner.getId(),
             assigner.getUsername(),
-            "SENIOR_OFFICER",
+            assignerRole,
             caseId,
             "CASE_ASSIGNMENT",
             targetUser.getUsername(),
             ipAddress,
             null,
-            "Assigned " + targetUser.getUsername() + " to case " + aCase.getCaseNumber() + " as " + roleInCase
+            String.format("Case Handover & Assignment: Case %s assigned/handed over role '%s' to officer %s (%s) by %s",
+                aCase.getCaseNumber(),
+                roleInCase,
+                targetUser.getFullName() != null ? targetUser.getFullName() : targetUser.getUsername(),
+                targetUser.getUsername(),
+                assigner.getUsername())
         );
 
         return saved;

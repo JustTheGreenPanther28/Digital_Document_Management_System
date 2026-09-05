@@ -3,6 +3,7 @@ package com.sih.casemanagement.service;
 import com.sih.casemanagement.common.enums.AuditEventType;
 import com.sih.casemanagement.common.enums.EvidenceStatus;
 import com.sih.casemanagement.common.enums.EvidenceType;
+import com.sih.casemanagement.common.enums.RoleType;
 import com.sih.casemanagement.common.enums.TransferStatus;
 import com.sih.casemanagement.common.exception.ResourceNotFoundException;
 import com.sih.casemanagement.common.exception.SecurityValidationException;
@@ -137,6 +138,22 @@ public class EvidenceAndCustodyService {
         User recipient = userRepository.findById(recipientId)
             .orElseThrow(() -> new ResourceNotFoundException("Recipient user not found: " + recipientId));
 
+        // Enforce ISO/IEC 27037 & Judicial chain of custody role eligibility
+        boolean isRecipientEligible = recipient.getRoles().stream()
+            .anyMatch(r -> r.getName() == RoleType.EVIDENCE_CUSTODIAN 
+                        || r.getName() == RoleType.FORENSIC_OFFICER 
+                        || r.getName() == RoleType.INVESTIGATOR 
+                        || r.getName() == RoleType.SENIOR_OFFICER 
+                        || r.getName() == RoleType.ADMIN);
+
+        if (!isRecipientEligible) {
+            String roleName = recipient.getRoles().isEmpty() ? "UNKNOWN" : recipient.getRoles().iterator().next().getName().name();
+            throw new SecurityValidationException(String.format(
+                "Custody Handover Blocked: Recipient '%s' holds role '%s' which is legally ineligible to take evidence custody under ISO/IEC 27037 rules. (Only Custodians, Forensic Officers, and Investigators are eligible).",
+                recipient.getUsername(), roleName
+            ));
+        }
+
         EvidenceTransfer transfer = new EvidenceTransfer(
             evidence,
             evidence.getCase(),
@@ -184,6 +201,25 @@ public class EvidenceAndCustodyService {
 
         if (!transfer.getRecipient().getId().equals(recipient.getId())) {
             throw new SecurityValidationException("Unauthorized: Only the designated recipient can accept this transfer.");
+        }
+
+        // ABAC & Clearance check: recipient must have clearance and case access
+        abacSecurity.checkCaseAccess(transfer.getEvidence().getCase().getId(), "TRANSFER_EVIDENCE");
+
+        // Enforce ISO/IEC 27037 & Judicial chain of custody role eligibility on acceptance
+        boolean isRecipientEligible = recipient.getRoles().stream()
+            .anyMatch(r -> r.getName() == RoleType.EVIDENCE_CUSTODIAN 
+                        || r.getName() == RoleType.FORENSIC_OFFICER 
+                        || r.getName() == RoleType.INVESTIGATOR 
+                        || r.getName() == RoleType.SENIOR_OFFICER 
+                        || r.getName() == RoleType.ADMIN);
+
+        if (!isRecipientEligible) {
+            String roleName = recipient.getRoles().isEmpty() ? "UNKNOWN" : recipient.getRoles().iterator().next().getName().name();
+            throw new SecurityValidationException(String.format(
+                "Custody Acceptance Denied: Role '%s' is not legally authorized to take custody of physical/digital evidence under ISO/IEC 27037 standards.",
+                roleName
+            ));
         }
 
         Evidence evidence = transfer.getEvidence();
@@ -247,6 +283,9 @@ public class EvidenceAndCustodyService {
         if (!transfer.getRecipient().getId().equals(recipient.getId())) {
             throw new SecurityValidationException("Unauthorized: Only the designated recipient can reject this transfer.");
         }
+
+        // ABAC & Clearance check: recipient must have clearance and case access
+        abacSecurity.checkCaseAccess(transfer.getEvidence().getCase().getId(), "TRANSFER_EVIDENCE");
 
         transfer.setStatus(TransferStatus.REJECTED);
         transfer.setActionedAt(Instant.now());

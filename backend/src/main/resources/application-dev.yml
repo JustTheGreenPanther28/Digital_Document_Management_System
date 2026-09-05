@@ -1,12 +1,12 @@
 spring:
   datasource:
-    url: jdbc:h2:mem:sih190_dev;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE
+    url: jdbc:h2:file:./storage_vault/db/sih190_dev;DB_CLOSE_DELAY=-1;AUTO_SERVER=TRUE;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE
     driver-class-name: org.h2.Driver
     username: sa
     password: ""
   jpa:
     hibernate:
-      ddl-auto: create-drop
+      ddl-auto: update
     database-platform: org.hibernate.dialect.H2Dialect
     show-sql: false
   flyway:

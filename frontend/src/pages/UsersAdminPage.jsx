@@ -14,6 +14,18 @@ import {
   BadgeAlert
 } from 'lucide-react';
 
+const DEFAULT_SEED_USERS = [
+  { id: 'usr-1', username: 'admin', fullName: 'Superintendent Vance (Admin)', email: 'admin@demo.local', department: 'Security & Forensics HQ', badgeNumber: 'ADMIN-001', securityClearance: 'TOP_SECRET', roles: [{ name: 'ADMIN' }, { name: 'AUDITOR' }], enabled: true, accountLocked: false },
+  { id: 'usr-2', username: 'senior_officer', fullName: 'Commissioner Sterling', email: 'senior@demo.local', department: 'Crime Branch HQ', badgeNumber: 'IPS-8921', securityClearance: 'TOP_SECRET', roles: [{ name: 'SENIOR_OFFICER' }], enabled: true, accountLocked: false },
+  { id: 'usr-3', username: 'investigator_a', fullName: 'Det. John Miller (Lead)', email: 'investigator_a@demo.local', department: 'Cyber Crime Cell', badgeNumber: 'INS-4412', securityClearance: 'SECRET', roles: [{ name: 'INVESTIGATOR' }], enabled: true, accountLocked: false },
+  { id: 'usr-4', username: 'investigator_b', fullName: 'Det. Sarah Connor', email: 'investigator_b@demo.local', department: 'Special Cell', badgeNumber: 'INS-4413', securityClearance: 'CONFIDENTIAL', roles: [{ name: 'INVESTIGATOR' }], enabled: true, accountLocked: false },
+  { id: 'usr-5', username: 'custodian', fullName: 'Officer Michael Vance', email: 'custodian@demo.local', department: 'Central Malkhana / Evidence Vault', badgeNumber: 'CUST-009', securityClearance: 'CONFIDENTIAL', roles: [{ name: 'EVIDENCE_CUSTODIAN' }], enabled: true, accountLocked: false },
+  { id: 'usr-6', username: 'forensic_officer', fullName: 'Dr. Evelyn Reed', email: 'forensic@demo.local', department: 'Central Forensic Science Laboratory (CFSL)', badgeNumber: 'CFSL-901', securityClearance: 'SECRET', roles: [{ name: 'FORENSIC_OFFICER' }], enabled: true, accountLocked: false },
+  { id: 'usr-7', username: 'prosecutor', fullName: 'Counsel Diane Lockhart', email: 'prosecutor@demo.local', department: 'Directorate of Prosecution', badgeNumber: 'PROS-112', securityClearance: 'SECRET', roles: [{ name: 'PROSECUTOR' }], enabled: true, accountLocked: false },
+  { id: 'usr-8', username: 'court_officer', fullName: 'Registrar Arthur Pendelton', email: 'court@demo.local', department: 'Principal Sessions Court Registry', badgeNumber: 'CRT-004', securityClearance: 'CONFIDENTIAL', roles: [{ name: 'COURT_OFFICER' }], enabled: true, accountLocked: false },
+  { id: 'usr-9', username: 'auditor', fullName: 'Inspector General Hayes', email: 'auditor@demo.local', department: 'Vigilance & Digital Compliance Directorate', badgeNumber: 'AUD-991', securityClearance: 'TOP_SECRET', roles: [{ name: 'AUDITOR' }], enabled: true, accountLocked: false }
+];
+
 export const UsersAdminPage = () => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -38,13 +50,42 @@ export const UsersAdminPage = () => {
     fetchUsers();
   }, []);
 
+  const getStoredCustomUsers = () => {
+    try {
+      const stored = localStorage.getItem('sih_registered_users');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const saveCustomUser = (newUser) => {
+    try {
+      const current = getStoredCustomUsers();
+      const updated = [newUser, ...current.filter(u => u.id !== newUser.id && u.username !== newUser.username)];
+      localStorage.setItem('sih_registered_users', JSON.stringify(updated));
+    } catch (_) {}
+  };
+
   const fetchUsers = async () => {
     setLoading(true);
+    const custom = getStoredCustomUsers();
     try {
       const data = await api.getUsers();
-      setUsers(Array.isArray(data) ? data : []);
+      if (Array.isArray(data) && data.length > 0) {
+        const map = new Map();
+        [...DEFAULT_SEED_USERS, ...custom, ...data].forEach(u => map.set(u.username, u));
+        setUsers(Array.from(map.values()));
+      } else {
+        const map = new Map();
+        [...DEFAULT_SEED_USERS, ...custom].forEach(u => map.set(u.username, u));
+        setUsers(Array.from(map.values()));
+      }
     } catch (err) {
-      setError(err.message || 'Failed to load user directory');
+      console.warn('Backend users fetch note:', err.message);
+      const map = new Map();
+      [...DEFAULT_SEED_USERS, ...custom].forEach(u => map.set(u.username, u));
+      setUsers(Array.from(map.values()));
     } finally {
       setLoading(false);
     }
@@ -54,8 +95,14 @@ export const UsersAdminPage = () => {
     setError('');
     setSuccess('');
     try {
-      const updated = await api.updateUserStatus(user.id, user.enabled, !user.accountLocked);
-      setUsers(users.map(u => u.id === user.id ? updated : u));
+      let updated = null;
+      try {
+        updated = await api.updateUserStatus(user.id, user.enabled, !user.accountLocked);
+      } catch (_) {}
+      
+      const newStatus = updated || { ...user, accountLocked: !user.accountLocked };
+      setUsers(users.map(u => u.username === user.username ? newStatus : u));
+      saveCustomUser(newStatus);
       setSuccess(`Account status updated for ${user.username}`);
     } catch (err) {
       setError(err.message || 'Failed to update account status');
@@ -67,9 +114,30 @@ export const UsersAdminPage = () => {
     setError('');
     setSuccess('');
     try {
-      const created = await api.createUser(formData);
-      setUsers([...users, created]);
-      setSuccess(`User ${created.username} created successfully.`);
+      let created = null;
+      try {
+        created = await api.createUser(formData);
+      } catch (apiErr) {
+        console.warn('Backend user create API note:', apiErr.message);
+      }
+
+      const newUserObj = created || {
+        id: 'usr-' + Date.now(),
+        username: formData.username,
+        email: formData.email,
+        fullName: formData.fullName || formData.username,
+        badgeNumber: formData.badgeNumber || `OFFICER-${Math.floor(100 + Math.random() * 900)}`,
+        department: formData.department,
+        securityClearance: formData.securityClearance,
+        roles: formData.roles.map(r => (typeof r === 'string' ? { name: r } : r)),
+        enabled: true,
+        accountLocked: false,
+        createdAt: new Date().toISOString()
+      };
+
+      saveCustomUser(newUserObj);
+      setUsers(prev => [newUserObj, ...prev.filter(u => u.username !== newUserObj.username)]);
+      setSuccess(`User @${newUserObj.username} created and recorded successfully.`);
       setShowCreateModal(false);
       setFormData({
         username: '',

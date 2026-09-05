@@ -46,6 +46,7 @@ public class AuthController {
     private final TotpService totpService;
     private final LoginAttemptService loginAttemptService;
     private final AuditService auditService;
+    private final com.sih.casemanagement.service.RateLimitingService rateLimitingService;
 
     @Value("${app.auth.cookie-secure:false}")
     private boolean cookieSecure;
@@ -58,7 +59,8 @@ public class AuthController {
         JwtService jwtService,
         TotpService totpService,
         LoginAttemptService loginAttemptService,
-        AuditService auditService
+        AuditService auditService,
+        com.sih.casemanagement.service.RateLimitingService rateLimitingService
     ) {
         this.userRepository = userRepository;
         this.refreshTokenRepository = refreshTokenRepository;
@@ -68,6 +70,7 @@ public class AuthController {
         this.totpService = totpService;
         this.loginAttemptService = loginAttemptService;
         this.auditService = auditService;
+        this.rateLimitingService = rateLimitingService;
     }
 
     @PostMapping("/login")
@@ -77,6 +80,11 @@ public class AuthController {
         HttpServletResponse httpResponse
     ) {
         String ipAddress = httpRequest.getRemoteAddr();
+
+        if (!rateLimitingService.isAllowed("login:" + ipAddress, 10, 60)) {
+            auditService.logEvent(AuditEventType.SECURITY_ALERT, null, request.username(), "UNKNOWN", null, "AUTH", null, ipAddress, null, "Login rate limit exceeded");
+            throw new SecurityValidationException("Too many login attempts. Please wait 1 minute before trying again.");
+        }
 
         User user = userRepository.findByUsername(request.username())
             .or(() -> userRepository.findByEmail(request.username()))
@@ -138,6 +146,10 @@ public class AuthController {
     ) {
         String ipAddress = httpRequest.getRemoteAddr();
 
+        if (!rateLimitingService.isAllowed("mfa:" + ipAddress, 10, 60)) {
+            throw new SecurityValidationException("Too many MFA verification attempts. Please wait.");
+        }
+
         if (!jwtService.validateToken(request.preAuthToken())) {
             throw new UnauthorizedAccessException("Pre-authentication MFA token is invalid or expired.");
         }
@@ -188,7 +200,15 @@ public class AuthController {
     }
 
     @PostMapping("/password-reset/request")
-    public ResponseEntity<Map<String, String>> requestPasswordReset(@Valid @RequestBody PasswordResetRequest request) {
+    public ResponseEntity<Map<String, String>> requestPasswordReset(
+        @Valid @RequestBody PasswordResetRequest request,
+        HttpServletRequest httpRequest
+    ) {
+        String ipAddress = httpRequest.getRemoteAddr();
+        if (!rateLimitingService.isAllowed("pwd_reset:" + ipAddress, 5, 300)) {
+            throw new SecurityValidationException("Too many password reset requests. Please wait a few minutes.");
+        }
+
         User user = userRepository.findByUsername(request.identifier())
             .or(() -> userRepository.findByEmail(request.identifier()))
             .orElse(null);
@@ -197,20 +217,23 @@ public class AuthController {
             String token = UUID.randomUUID().toString();
             PasswordResetToken resetToken = new PasswordResetToken(user, token, LocalDateTime.now().plusHours(1));
             passwordResetTokenRepository.save(resetToken);
-            auditService.logEvent(AuditEventType.SECURITY_ALERT, user.getId(), user.getUsername(), "SYSTEM", null, "AUTH", null, "0.0.0.0", null, "Password reset token requested");
-            return ResponseEntity.ok(Map.of(
-                "message", "Password reset instructions initiated.",
-                "resetToken", token // Provided for development/testing workflow
-            ));
+            auditService.logEvent(AuditEventType.SECURITY_ALERT, user.getId(), user.getUsername(), "SYSTEM", null, "AUTH", null, ipAddress, null, "Password reset token generated securely");
         }
 
-        return ResponseEntity.ok(Map.of("message", "If an account exists, reset instructions have been generated."));
+        return ResponseEntity.ok(Map.of("message", "If an account exists with the provided identifier, password reset instructions have been dispatched."));
     }
 
     @PostMapping("/password-reset/confirm")
     public ResponseEntity<Map<String, String>> confirmPasswordReset(@Valid @RequestBody PasswordResetConfirmRequest request) {
         PasswordResetToken resetToken = passwordResetTokenRepository.findByToken(request.token())
             .orElseThrow(() -> new SecurityValidationException("Invalid or expired password reset token."));
+
+        // Timing-attack resistant token validation
+        byte[] expectedToken = resetToken.getToken().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        byte[] providedToken = request.token().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        if (!java.security.MessageDigest.isEqual(expectedToken, providedToken)) {
+            throw new SecurityValidationException("Invalid password reset token.");
+        }
 
         if (resetToken.isUsed() || resetToken.getExpiryDate().isBefore(LocalDateTime.now())) {
             throw new SecurityValidationException("Password reset token has expired or already been utilized.");

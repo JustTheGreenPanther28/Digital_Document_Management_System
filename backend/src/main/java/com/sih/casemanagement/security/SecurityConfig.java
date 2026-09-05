@@ -1,6 +1,7 @@
 package com.sih.casemanagement.security;
 
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.MediaType;
@@ -22,6 +23,7 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import java.util.Arrays;
 import java.util.List;
 
 @Configuration
@@ -31,6 +33,9 @@ public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthFilter;
     private final CustomUserDetailsService userDetailsService;
+
+    @Value("${app.security.cors.allowed-origins:http://localhost:*,http://127.0.0.1:*,https://localhost:*}")
+    private String allowedOrigins;
 
     public SecurityConfig(JwtAuthenticationFilter jwtAuthFilter, CustomUserDetailsService userDetailsService) {
         this.jwtAuthFilter = jwtAuthFilter;
@@ -72,7 +77,7 @@ public class SecurityConfig {
                 .frameOptions(HeadersConfigurer.FrameOptionsConfig::deny)
                 .contentTypeOptions(HeadersConfigurer.ContentTypeOptionsConfig::and)
                 .httpStrictTransportSecurity(hsts -> hsts.includeSubDomains(true).maxAgeInSeconds(31536000))
-                .contentSecurityPolicy(csp -> csp.policyDirectives("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'self';"))
+                .contentSecurityPolicy(csp -> csp.policyDirectives("default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self' http://localhost:* ws://localhost:* https://localhost:*; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self';"))
                 .referrerPolicy(referrer -> referrer.policy(org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN))
                 .permissionsPolicy(permissions -> permissions.policy("geolocation=(), camera=(), microphone=(), payment=()"))
             )
@@ -82,8 +87,7 @@ public class SecurityConfig {
                     "/v3/api-docs/**",
                     "/swagger-ui/**",
                     "/swagger-ui.html",
-                    "/actuator/health",
-                    "/h2-console/**"
+                    "/actuator/health"
                 ).permitAll()
                 .anyRequest().authenticated()
             )
@@ -96,9 +100,13 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOriginPatterns(List.of("http://localhost:*", "http://127.0.0.1:*"));
+        List<String> origins = Arrays.stream(allowedOrigins.split(","))
+            .map(String::trim)
+            .filter(s -> !s.isEmpty())
+            .toList();
+        config.setAllowedOriginPatterns(origins);
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Requested-With", "Accept", "Origin"));
+        config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Requested-With", "Accept", "Origin", "X-CSRF-Token"));
         config.setExposedHeaders(List.of("Authorization", "Content-Disposition"));
         config.setAllowCredentials(true);
         config.setMaxAge(3600L);
@@ -108,3 +116,4 @@ public class SecurityConfig {
         return source;
     }
 }
+

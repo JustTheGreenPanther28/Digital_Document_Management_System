@@ -1,43 +1,41 @@
-# ==============================================================================
-# Backend Multi-Stage Dockerfile — FORSIC Case Management (Spring Boot 3.4.3)
-# Stage 1: Build fat JAR with Maven
-# Stage 2: Minimal JRE 21 runtime — non-root, hardened
-# No secrets baked in — all config injected via environment variables at runtime
-# ==============================================================================
+# Multi-stage Dockerfile for FORSIC Spring Boot 3 Backend
 
-# ---- Stage 1: Build ----
-FROM maven:3.9-eclipse-temurin-21-alpine AS builder
-
+# Stage 1: Build JAR with Maven
+FROM maven:3.9.9-eclipse-temurin-21-alpine AS builder
 WORKDIR /build
 
-# Cache dependencies layer separately (only re-downloads when pom.xml changes)
-COPY pom.xml .
-RUN mvn dependency:go-offline -q
+# Copy POM and download dependencies
+COPY pom.xml ./
+RUN mvn dependency:go-offline -B
 
-# Copy source and build
+# Copy source code and build production package
 COPY src ./src
-RUN mvn package -DskipTests -q
+RUN mvn clean package -DskipTests -B
 
-# ---- Stage 2: Runtime ----
-FROM eclipse-temurin:21-jre-alpine AS runtime
-
-# Security hardening: run as non-root user
-RUN addgroup -S forsic && adduser -S appuser -G forsic
-
+# Stage 2: Hardened, Non-root Production Runtime
+FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 
-# Copy only the fat JAR from builder stage
-COPY --from=builder /build/target/*.jar app.jar
+# Create unprivileged system user
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
-# Set ownership
-RUN chown -R appuser:forsic /app
+# Security & system dependencies
+RUN apk add --no-cache curl tzdata
+
+# Copy built JAR from builder
+COPY --from=builder /build/target/*.jar app.jar
+RUN chown -R appuser:appgroup /app
 
 USER appuser
 
-# No secrets here — all injected via docker-compose env_file: .env
+# Health check against Spring Boot Actuator
+HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
+  CMD curl -f http://localhost:8080/actuator/health || exit 1
+
 EXPOSE 8080
 
-# Optimized JVM flags for container environments
-ENV JAVA_OPTS="-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -Djava.security.egd=file:/dev/./urandom"
-
-ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]
+ENTRYPOINT ["java", \
+  "-XX:+UseG1GC", \
+  "-XX:MaxRAMPercentage=75.0", \
+  "-Djava.security.egd=file:/dev/./urandom", \
+  "-jar", "app.jar"]

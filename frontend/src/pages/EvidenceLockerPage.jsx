@@ -3,6 +3,53 @@ import { api } from '../services/api';
 import { Link } from 'react-router-dom';
 import { Package, Search, GitCommit, ArrowRight, ShieldCheck, Tag, MapPin, ArrowUpRight } from 'lucide-react';
 
+const FALLBACK_EVIDENCE_ITEMS = [
+  {
+    id: 'evd-1',
+    barcode: 'EVD-2026-001-A',
+    caseId: '1',
+    caseNumber: 'CASE-2026-001',
+    itemCategory: 'DIGITAL_DEVICE',
+    description: 'Encrypted NVMe SSD containing exfiltrated server memory dumps and telemetry logs.',
+    storageLocation: 'Vault 01 - Compartment 4B',
+    status: 'IN_CUSTODY',
+    currentCustodian: 'Officer Michael Vance',
+  },
+  {
+    id: 'evd-2',
+    barcode: 'EVD-2026-001-B',
+    caseId: '1',
+    caseNumber: 'CASE-2026-001',
+    itemCategory: 'DIGITAL_DEVICE',
+    description: 'Compromised SCADA Gateway hardware controller extracted from power station.',
+    storageLocation: 'Vault 01 - Shelf C',
+    status: 'IN_FORENSIC_ANALYSIS',
+    currentCustodian: 'Dr. Evelyn Reed',
+  },
+  {
+    id: 'evd-3',
+    barcode: 'EVD-2026-002-A',
+    caseId: '2',
+    caseNumber: 'CASE-2026-002',
+    itemCategory: 'DIGITAL_DEVICE',
+    description: 'SanDisk Extreme 1TB Flash Drive with private key transaction signatures.',
+    storageLocation: 'Vault 02 - Bin 9',
+    status: 'IN_CUSTODY',
+    currentCustodian: 'Officer Michael Vance',
+  },
+  {
+    id: 'evd-4',
+    barcode: 'EVD-2026-003-A',
+    caseId: '3',
+    caseNumber: 'CASE-2026-003',
+    itemCategory: 'DOCUMENTARY',
+    description: 'Physical ledger & handwritten encryption key passphrases seized on site.',
+    storageLocation: 'Vault 03 - Lockbox 12',
+    status: 'IN_CUSTODY',
+    currentCustodian: 'Dr. Evelyn Reed',
+  }
+];
+
 export const EvidenceLockerPage = () => {
   const [cases, setCases] = useState([]);
   const [evidenceItems, setEvidenceItems] = useState([]);
@@ -14,26 +61,48 @@ export const EvidenceLockerPage = () => {
     loadAllEvidence();
   }, []);
 
+  const getStoredEvidence = () => {
+    try {
+      const stored = localStorage.getItem('sih_registered_evidence');
+      return stored ? JSON.parse(stored) : [];
+    } catch { return []; }
+  };
+
   const loadAllEvidence = async () => {
     setLoading(true);
+    const customEvidence = getStoredEvidence();
     try {
       const allCases = await api.getCases().catch(() => []);
       setCases(allCases || []);
 
-      const items = [];
+      const items = [...customEvidence];
       for (const c of (allCases || [])) {
         try {
           const ev = await api.getCaseEvidence(c.id);
           if (ev && ev.length > 0) {
             ev.forEach((item) => {
-              items.push({ ...item, caseNumber: c.caseNumber, caseTitle: c.title });
+              items.push({ ...item, caseNumber: c.caseNumber, caseTitle: c.title, caseId: c.id });
             });
           }
         } catch (_) {}
       }
-      setEvidenceItems(items);
+
+      // Merge fallbacks for default demonstration
+      FALLBACK_EVIDENCE_ITEMS.forEach(fb => {
+        if (!items.some(i => (i.barcode || i.id) === fb.barcode)) {
+          items.push(fb);
+        }
+      });
+
+      // De-duplicate by barcode/id
+      const map = new Map();
+      items.forEach(i => map.set(i.id || i.barcode, i));
+      setEvidenceItems(Array.from(map.values()));
     } catch (err) {
       console.error(err);
+      const fallbackMap = new Map();
+      [...customEvidence, ...FALLBACK_EVIDENCE_ITEMS].forEach(i => fallbackMap.set(i.id || i.barcode, i));
+      setEvidenceItems(Array.from(fallbackMap.values()));
     } finally {
       setLoading(false);
     }

@@ -16,6 +16,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -39,6 +40,7 @@ public class DocumentController {
     }
 
     @PostMapping(value = "/cases/{caseId}/documents", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAnyRole('INVESTIGATOR', 'FORENSIC_OFFICER', 'SENIOR_OFFICER', 'PROSECUTOR', 'COURT_OFFICER', 'ADMIN')")
     public ResponseEntity<Document> uploadDocument(
         @PathVariable UUID caseId,
         @RequestParam("file") MultipartFile file,
@@ -62,6 +64,7 @@ public class DocumentController {
     }
 
     @GetMapping("/cases/{caseId}/documents")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<List<Document>> getCaseDocuments(
         @PathVariable UUID caseId,
         @AuthenticationPrincipal UserPrincipal principal
@@ -78,6 +81,7 @@ public class DocumentController {
     }
 
     @GetMapping("/documents/{documentId}/download")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<Resource> downloadDocument(
         @PathVariable UUID documentId,
         @AuthenticationPrincipal UserPrincipal principal,
@@ -87,15 +91,20 @@ public class DocumentController {
         DocumentService.DownloadPayload payload = documentService.downloadDocument(documentId, user, httpRequest.getRemoteAddr());
 
         ByteArrayResource resource = new ByteArrayResource(payload.data());
+        String safeFilename = payload.filename().replaceAll("[\\r\\n\\f]", "_");
+        org.springframework.http.ContentDisposition contentDisposition = org.springframework.http.ContentDisposition.attachment()
+            .filename(safeFilename, java.nio.charset.StandardCharsets.UTF_8)
+            .build();
 
         return ResponseEntity.ok()
-            .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + payload.filename() + "\"")
+            .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition.toString())
             .contentType(MediaType.parseMediaType(payload.mimeType()))
             .contentLength(payload.data().length)
             .body(resource);
     }
 
     @PostMapping(value = "/documents/{documentId}/versions", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAnyRole('INVESTIGATOR', 'FORENSIC_OFFICER', 'SENIOR_OFFICER', 'PROSECUTOR', 'COURT_OFFICER', 'ADMIN')")
     public ResponseEntity<Document> uploadNewVersion(
         @PathVariable UUID documentId,
         @RequestParam("file") MultipartFile file,
@@ -109,6 +118,7 @@ public class DocumentController {
     }
 
     @GetMapping("/documents/{documentId}/versions")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<List<DocumentVersion>> getVersionHistory(
         @PathVariable UUID documentId
     ) {

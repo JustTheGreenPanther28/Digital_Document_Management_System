@@ -1,57 +1,7 @@
-# ==============================================================================
-# FORSIC Case Management — .gitignore
-# CRITICAL: .env is NEVER committed. Secrets live in OCI Vault only.
-# ==============================================================================
-
-# --- Environment & Secrets (NEVER COMMIT) ---
-.env
-.env.local
-.env.*.local
-*.secret
-*.pem
-*.p12
-*.jks
-*.pfx
-
-# --- Backend Build Output ---
+# Build artifacts
 backend/target/
-backend/.mvn/wrapper/maven-wrapper.jar
-!backend/.mvn/wrapper/maven-wrapper.properties
-backend/storage_vault/
-storage_vault/
-
-# --- Frontend Build Output ---
+backend/.mvn/wrapper/
 frontend/node_modules/
 frontend/dist/
-frontend/.vite/
-
-# --- IDE & Editor Files ---
-.idea/
-*.iml
-*.iws
-*.ipr
-.classpath
-.project
-.settings/
-.springBeans
-*.sts4-cache/
-.factorypath
-.vscode/
-*.swp
-*.swo
-*~
-
-# --- OS Generated Files ---
-.DS_Store
-Thumbs.db
-Desktop.ini
-
-# --- Docker ---
-docker-compose.override.yml
-
-# --- Logs ---
+.env
 *.log
-logs/
-
-# --- Test Reports ---
-backend/target/surefire-reports/

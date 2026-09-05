@@ -39,7 +39,7 @@ public class AuditAndSecurityController {
     }
 
     @GetMapping("/audit/logs")
-    @PreAuthorize("hasAnyRole('AUDITOR', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('AUDITOR', 'ADMIN', 'SENIOR_OFFICER')")
     public ResponseEntity<List<AuditLog>> getAuditLogs(@RequestParam(value = "caseId", required = false) UUID caseId) {
         if (caseId != null) {
             return ResponseEntity.ok(auditLogRepository.findByCaseIdOrderByTimestampDesc(caseId));
@@ -48,7 +48,7 @@ public class AuditAndSecurityController {
     }
 
     @GetMapping("/audit/verify")
-    @PreAuthorize("hasAnyRole('AUDITOR', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('AUDITOR', 'ADMIN', 'SENIOR_OFFICER')")
     public ResponseEntity<Map<String, Object>> verifyAuditChain() {
         Map<String, Object> report = auditService.verifyAuditChain();
         return ResponseEntity.ok(report);
