@@ -163,6 +163,20 @@ public class AuditService {
         return result;
     }
 
+    @org.springframework.scheduling.annotation.Scheduled(fixedDelay = 60000, initialDelay = 15000)
+    public void scheduledAuditChainVerification() {
+        try {
+            Map<String, Object> result = verifyAuditChain();
+            if (Boolean.FALSE.equals(result.get("valid"))) {
+                log.error("SCHEDULED AUDIT VERIFICATION FAILURE: {}", result.get("message"));
+            } else {
+                log.debug("Scheduled audit verification passed: {} records verified", result.get("totalVerified"));
+            }
+        } catch (Exception e) {
+            log.error("Scheduled audit verification encountered error", e);
+        }
+    }
+
     private void recordTamperAlert(AuditLog logEntry, String reason) {
         log.error("AUDIT TAMPER ALERT: {}", reason);
         SecurityAlert alert = new SecurityAlert(

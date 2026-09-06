@@ -26,14 +26,30 @@ public class RedisConfig {
     @Value("${spring.data.redis.password:}")
     private String redisPassword;
 
+    @Value("${spring.data.redis.username:default}")
+    private String redisUsername;
+
+    @Value("${spring.data.redis.ssl.enabled:false}")
+    private boolean sslEnabled;
+
     @Bean
     public RedisConnectionFactory redisConnectionFactory() {
         RedisStandaloneConfiguration config = new RedisStandaloneConfiguration(redisHost, redisPort);
+        if (redisUsername != null && !redisUsername.isBlank()) {
+            config.setUsername(redisUsername);
+        }
         if (redisPassword != null && !redisPassword.isBlank()) {
             config.setPassword(redisPassword);
         }
-        LettuceConnectionFactory factory = new LettuceConnectionFactory(config);
-        log.info("Configured Redis connection factory for {}:{}", redisHost, redisPort);
+        
+        org.springframework.data.redis.connection.lettuce.LettuceClientConfiguration.LettuceClientConfigurationBuilder clientConfigBuilder =
+            org.springframework.data.redis.connection.lettuce.LettuceClientConfiguration.builder();
+        if (sslEnabled || (redisHost != null && redisHost.contains("upstash.io"))) {
+            clientConfigBuilder.useSsl();
+        }
+        
+        LettuceConnectionFactory factory = new LettuceConnectionFactory(config, clientConfigBuilder.build());
+        log.info("Configured Upstash/Redis connection factory for {}:{} (ssl={})", redisHost, redisPort, sslEnabled);
         return factory;
     }
 

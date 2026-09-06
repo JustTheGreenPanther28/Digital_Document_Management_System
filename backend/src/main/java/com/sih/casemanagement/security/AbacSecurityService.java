@@ -30,19 +30,22 @@ public class AbacSecurityService {
     private final DocumentRepository documentRepository;
     private final EvidenceRepository evidenceRepository;
     private final DocumentPermissionRepository documentPermissionRepository;
+    private final com.sih.casemanagement.service.ThreatDetectionService threatDetectionService;
 
     public AbacSecurityService(
         CaseRepository caseRepository,
         CaseUserAssignmentRepository assignmentRepository,
         DocumentRepository documentRepository,
         EvidenceRepository evidenceRepository,
-        DocumentPermissionRepository documentPermissionRepository
+        DocumentPermissionRepository documentPermissionRepository,
+        com.sih.casemanagement.service.ThreatDetectionService threatDetectionService
     ) {
         this.caseRepository = caseRepository;
         this.assignmentRepository = assignmentRepository;
         this.documentRepository = documentRepository;
         this.evidenceRepository = evidenceRepository;
         this.documentPermissionRepository = documentPermissionRepository;
+        this.threatDetectionService = threatDetectionService;
     }
 
     public UserPrincipal getCurrentPrincipal() {
@@ -70,6 +73,9 @@ public class AbacSecurityService {
 
         // Clearance check: user clearance must be >= case classification
         if (!user.getClearance().canAccess(aCase.getClassification())) {
+            if (aCase.getClassification() == com.sih.casemanagement.common.enums.DocumentClassification.TOP_SECRET) {
+                threatDetectionService.recordTopSecretAccessAnomaly(user.getId(), user.getUsername(), "ABAC_GUARD", null);
+            }
             return false;
         }
 
@@ -99,6 +105,10 @@ public class AbacSecurityService {
     @Transactional(readOnly = true)
     public void checkCaseAccess(UUID caseId, String action) {
         if (!canAccessCase(caseId, action)) {
+            UserPrincipal user = getCurrentPrincipal();
+            if (user != null) {
+                threatDetectionService.recordPrivilegeViolation(user.getId(), user.getUsername(), "ABAC_GUARD", action, "Case: " + caseId);
+            }
             throw new UnauthorizedAccessException("Access denied: You are not authorized to perform action '" +
                 action + "' on case " + caseId + " (ABAC assignment or clearance check failed).");
         }
@@ -119,6 +129,9 @@ public class AbacSecurityService {
 
         // 2. Clearance check on document classification
         if (!user.getClearance().canAccess(doc.getClassification())) {
+            if (doc.getClassification() == com.sih.casemanagement.common.enums.DocumentClassification.TOP_SECRET) {
+                threatDetectionService.recordTopSecretAccessAnomaly(user.getId(), user.getUsername(), "ABAC_GUARD", documentId);
+            }
             return false;
         }
 
@@ -149,6 +162,10 @@ public class AbacSecurityService {
     @Transactional(readOnly = true)
     public void checkDocumentAccess(UUID documentId, String action) {
         if (!canAccessDocument(documentId, action)) {
+            UserPrincipal user = getCurrentPrincipal();
+            if (user != null) {
+                threatDetectionService.recordPrivilegeViolation(user.getId(), user.getUsername(), "ABAC_GUARD", action, "Document: " + documentId);
+            }
             throw new UnauthorizedAccessException("Access denied: Document clearance, fine-grained permission, or case assignment authorization failed for document " + documentId);
         }
     }

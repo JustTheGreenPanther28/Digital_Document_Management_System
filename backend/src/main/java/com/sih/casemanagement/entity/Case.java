@@ -9,7 +9,6 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "cases")
-@com.fasterxml.jackson.annotation.JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class Case {
 
     @Id
@@ -49,8 +48,6 @@ public class Case {
     @Column(nullable = false, length = 20)
     private DocumentClassification classification = DocumentClassification.CONFIDENTIAL;
 
-    @com.fasterxml.jackson.annotation.JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "passwordHash", "mfaSecret", "roles"})
-    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by")
     private User createdBy;
 
@@ -60,18 +57,32 @@ public class Case {
     @Column(name = "legal_hold_reason", columnDefinition = "TEXT")
     private String legalHoldReason;
 
-    @com.fasterxml.jackson.annotation.JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "passwordHash", "mfaSecret", "roles"})
-    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "legal_hold_by")
     private User legalHoldBy;
 
     @Column(name = "closed_at")
     private Instant closedAt;
 
-    @com.fasterxml.jackson.annotation.JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "passwordHash", "mfaSecret", "roles"})
-    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "closed_by")
     private User closedBy;
+
+    @Column(name = "archived_at")
+    private Instant archivedAt;
+
+    @JoinColumn(name = "archived_by")
+    private User archivedBy;
+
+    @Column(name = "archive_reason", columnDefinition = "TEXT")
+    private String archiveReason;
+
+    @Column(name = "is_worm_preserved", nullable = false)
+    private boolean wormPreserved = false;
+
+    @Column(name = "worm_preserved_until")
+    private Instant wormPreservedUntil;
+
+    @Column(name = "worm_compliance_token", length = 128)
+    private String wormComplianceToken;
 
     @Column(name = "retention_period_days", nullable = false)
     private int retentionPeriodDays = 3650;
@@ -140,6 +151,24 @@ public class Case {
 
     public User getClosedBy() { return closedBy; }
     public void setClosedBy(User closedBy) { this.closedBy = closedBy; }
+
+    public Instant getArchivedAt() { return archivedAt; }
+    public void setArchivedAt(Instant archivedAt) { this.archivedAt = archivedAt; }
+
+    public User getArchivedBy() { return archivedBy; }
+    public void setArchivedBy(User archivedBy) { this.archivedBy = archivedBy; }
+
+    public String getArchiveReason() { return archiveReason; }
+    public void setArchiveReason(String archiveReason) { this.archiveReason = archiveReason; }
+
+    public boolean isWormPreserved() { return wormPreserved; }
+    public void setWormPreserved(boolean wormPreserved) { this.wormPreserved = wormPreserved; }
+
+    public Instant getWormPreservedUntil() { return wormPreservedUntil; }
+    public void setWormPreservedUntil(Instant wormPreservedUntil) { this.wormPreservedUntil = wormPreservedUntil; }
+
+    public String getWormComplianceToken() { return wormComplianceToken; }
+    public void setWormComplianceToken(String wormComplianceToken) { this.wormComplianceToken = wormComplianceToken; }
 
     public int getRetentionPeriodDays() { return retentionPeriodDays; }
     public void setRetentionPeriodDays(int retentionPeriodDays) { this.retentionPeriodDays = retentionPeriodDays; }

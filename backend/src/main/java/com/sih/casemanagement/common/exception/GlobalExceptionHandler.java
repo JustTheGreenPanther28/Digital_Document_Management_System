@@ -21,6 +21,12 @@ public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
+    private final com.sih.casemanagement.service.ThreatDetectionService threatDetectionService;
+
+    public GlobalExceptionHandler(com.sih.casemanagement.service.ThreatDetectionService threatDetectionService) {
+        this.threatDetectionService = threatDetectionService;
+    }
+
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<Map<String, Object>> handleNotFound(ResourceNotFoundException ex) {
         return buildResponse(HttpStatus.NOT_FOUND, ex.getMessage());
@@ -34,6 +40,9 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<Map<String, Object>> handleSpringAccessDenied(AccessDeniedException ex) {
+        org.springframework.security.core.Authentication auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        String username = (auth != null) ? auth.getName() : "ANONYMOUS";
+        threatDetectionService.recordPrivilegeViolation(null, username, "SPRING_SECURITY_GATEWAY", "RBAC_CHECK", ex.getMessage());
         return buildResponse(HttpStatus.FORBIDDEN, "Access is denied: Insufficient permissions.");
     }
 
@@ -51,6 +60,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(WorkflowViolationException.class)
     public ResponseEntity<Map<String, Object>> handleWorkflowViolation(WorkflowViolationException ex) {
         return buildResponse(HttpStatus.BAD_REQUEST, ex.getMessage());
+    }
+
+    @ExceptionHandler(RateLimitExceededException.class)
+    public ResponseEntity<Map<String, Object>> handleRateLimit(RateLimitExceededException ex) {
+        log.warn("Rate limit exceeded: {}", ex.getMessage());
+        return buildResponse(HttpStatus.TOO_MANY_REQUESTS, ex.getMessage());
     }
 
     @ExceptionHandler(TamperException.class)
@@ -76,6 +91,11 @@ public class GlobalExceptionHandler {
         body.put("error", "Validation Error");
         body.put("details", fieldErrors);
         return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(body);
+    }
+
+    @ExceptionHandler(org.springframework.web.servlet.resource.NoResourceFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleNoResourceFound(org.springframework.web.servlet.resource.NoResourceFoundException ex) {
+        return buildResponse(HttpStatus.NOT_FOUND, "Resource not found: " + ex.getResourcePath());
     }
 
     @ExceptionHandler(Exception.class)

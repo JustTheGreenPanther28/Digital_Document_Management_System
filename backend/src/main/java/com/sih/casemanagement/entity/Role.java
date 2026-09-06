@@ -19,6 +19,14 @@ public class Role {
     @Column(length = 255)
     private String description;
 
+    @ManyToMany(fetch = FetchType.EAGER)
+    @JoinTable(
+        name = "role_permissions",
+        joinColumns = @JoinColumn(name = "role_id"),
+        inverseJoinColumns = @JoinColumn(name = "permission_id")
+    )
+    private java.util.Set<Permission> permissions = new java.util.HashSet<>();
+
     public Role() {}
 
     public Role(RoleType name, String description) {
@@ -34,4 +42,7 @@ public class Role {
 
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }
+
+    public java.util.Set<Permission> getPermissions() { return permissions; }
+    public void setPermissions(java.util.Set<Permission> permissions) { this.permissions = permissions; }
 }

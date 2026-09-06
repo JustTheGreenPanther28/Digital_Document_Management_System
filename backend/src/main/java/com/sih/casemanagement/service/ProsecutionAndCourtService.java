@@ -29,6 +29,7 @@ public class ProsecutionAndCourtService {
     private final DocumentRepository documentRepository;
     private final CustodyRecordRepository custodyRecordRepository;
     private final DigitalSignatureService digitalSignatureService;
+    private final ApprovalRepository approvalRepository;
     private final CaseService caseService;
     private final AuditService auditService;
     private final AbacSecurityService abacSecurity;
@@ -44,6 +45,7 @@ public class ProsecutionAndCourtService {
         DocumentRepository documentRepository,
         CustodyRecordRepository custodyRecordRepository,
         DigitalSignatureService digitalSignatureService,
+        ApprovalRepository approvalRepository,
         CaseService caseService,
         AuditService auditService,
         AbacSecurityService abacSecurity
@@ -58,6 +60,7 @@ public class ProsecutionAndCourtService {
         this.documentRepository = documentRepository;
         this.custodyRecordRepository = custodyRecordRepository;
         this.digitalSignatureService = digitalSignatureService;
+        this.approvalRepository = approvalRepository;
         this.caseService = caseService;
         this.auditService = auditService;
         this.abacSecurity = abacSecurity;
@@ -177,6 +180,17 @@ public class ProsecutionAndCourtService {
 
         ChargeSheet saved = chargeSheetRepository.save(sheet);
 
+        Approval seniorApproval = new Approval();
+        seniorApproval.setRequestType("CHARGE_SHEET_REVIEW");
+        seniorApproval.setTargetEntityType("CHARGE_SHEET");
+        seniorApproval.setTargetEntityId(sheet.getId());
+        seniorApproval.setRequestedBy(sheet.getPreparedBy() != null ? sheet.getPreparedBy() : seniorOfficer);
+        seniorApproval.setReviewer(seniorOfficer);
+        seniorApproval.setStatus(approved ? "APPROVED" : "REJECTED");
+        seniorApproval.setReviewNotes(notes);
+        seniorApproval.setReviewedAt(java.time.LocalDateTime.now());
+        approvalRepository.save(seniorApproval);
+
         auditService.logEvent(
             AuditEventType.DOCUMENT_APPROVED,
             seniorOfficer.getId(),
@@ -247,7 +261,20 @@ public class ProsecutionAndCourtService {
             );
         }
 
-        return chargeSheetRepository.save(sheet);
+        ChargeSheet savedSheet = chargeSheetRepository.save(sheet);
+
+        Approval prosApproval = new Approval();
+        prosApproval.setRequestType("PROSECUTOR_REVIEW_AND_SIGN");
+        prosApproval.setTargetEntityType("CHARGE_SHEET");
+        prosApproval.setTargetEntityId(sheet.getId());
+        prosApproval.setRequestedBy(sheet.getSeniorOfficer() != null ? sheet.getSeniorOfficer() : prosecutor);
+        prosApproval.setReviewer(prosecutor);
+        prosApproval.setStatus(approved ? "APPROVED" : "REJECTED");
+        prosApproval.setReviewNotes(notes);
+        prosApproval.setReviewedAt(java.time.LocalDateTime.now());
+        approvalRepository.save(prosApproval);
+
+        return savedSheet;
     }
 
     // 5. Court Filing
@@ -270,6 +297,17 @@ public class ProsecutionAndCourtService {
         filing.setStatus("FILED");
 
         CourtFiling saved = courtFilingRepository.save(filing);
+
+        Approval filingApproval = new Approval();
+        filingApproval.setRequestType("COURT_FILING");
+        filingApproval.setTargetEntityType("COURT_FILING");
+        filingApproval.setTargetEntityId(saved.getId());
+        filingApproval.setRequestedBy(courtOfficer);
+        filingApproval.setReviewer(courtOfficer);
+        filingApproval.setStatus("APPROVED");
+        filingApproval.setReviewNotes("Formally filed in " + courtName + " (Ref: " + filingNumber + ")");
+        filingApproval.setReviewedAt(java.time.LocalDateTime.now());
+        approvalRepository.save(filingApproval);
 
         caseService.updateCaseStatus(caseId, CaseStatus.FILED_IN_COURT, "Filed in " + courtName + " (Ref: " + filingNumber + ")", courtOfficer, ipAddress);
 
@@ -427,5 +465,15 @@ public class ProsecutionAndCourtService {
         bundle.put("compiledAt", Instant.now().toString());
         bundle.put("section65bCertified", true);
         return bundle;
+    }
+
+    @Transactional(readOnly = true)
+    public List<Approval> getApprovalsForEntity(UUID entityId) {
+        return approvalRepository.findByTargetEntityId(entityId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<Approval> getAllApprovals() {
+        return approvalRepository.findAll();
     }
 }

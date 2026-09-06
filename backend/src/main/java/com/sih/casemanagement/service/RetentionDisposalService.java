@@ -1,6 +1,7 @@
 package com.sih.casemanagement.service;
 
 import com.sih.casemanagement.common.enums.AuditEventType;
+import com.sih.casemanagement.common.enums.CaseStatus;
 import com.sih.casemanagement.common.exception.SecurityValidationException;
 import com.sih.casemanagement.common.exception.WorkflowViolationException;
 import com.sih.casemanagement.entity.*;
@@ -13,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
@@ -55,6 +57,88 @@ public class RetentionDisposalService {
     }
 
     @Transactional
+    public Case archiveCase(UUID caseId, User archiver, String archiveReason, int retentionYears, String wormMode) {
+        Case aCase = caseRepository.findById(caseId)
+            .orElseThrow(() -> new SecurityValidationException("Case not found for archival: " + caseId));
+
+        // 1. Strict status eligibility check: Case must be CLOSED or can transition to ARCHIVED
+        if (!aCase.getStatus().canTransitionTo(CaseStatus.ARCHIVED) && aCase.getStatus() != CaseStatus.CLOSED) {
+            throw new WorkflowViolationException("Invalid lifecycle transition: Case must be CLOSED before it can be ARCHIVED. Current status: " + aCase.getStatus());
+        }
+
+        // 2. Strict Legal Hold Veto check
+        if (aCase.isLegalHold()) {
+            log.error("LEGAL HOLD VETO: Cannot archive case {} under active judicial hold: {}", aCase.getCaseNumber(), aCase.getLegalHoldReason());
+            auditService.logEvent(
+                AuditEventType.SECURITY_ALERT,
+                archiver.getId(),
+                archiver.getUsername(),
+                archiver.getRoles().iterator().next().getName().name(),
+                caseId,
+                "LEGAL_HOLD_VETO",
+                caseId.toString(),
+                "0.0.0.0",
+                null,
+                "Attempted archival on active Legal Hold was blocked."
+            );
+            throw new WorkflowViolationException("Action Blocked by Legal Hold: Case is subject to judicial hold and cannot be archived.");
+        }
+
+        // 3. Compute WORM preservation horizon and compliance token
+        int effectiveYears = retentionYears > 0 ? retentionYears : (aCase.getRetentionPeriodDays() / 365);
+        if (effectiveYears <= 0) effectiveYears = 10;
+        Instant wormLockUntil = Instant.now().plus(effectiveYears * 365L, ChronoUnit.DAYS);
+        String wormModeEffective = (wormMode != null && !wormMode.isBlank()) ? wormMode : "COMPLIANCE";
+        String wormToken = "WORM-" + sha256(aCase.getCaseNumber() + "|" + wormLockUntil + "|" + archiver.getUsername()).substring(0, 24).toUpperCase();
+
+        // 4. Update Case Entity to ARCHIVED with WORM preservation
+        aCase.setStatus(CaseStatus.ARCHIVED);
+        aCase.setArchivedAt(Instant.now());
+        aCase.setArchivedBy(archiver);
+        aCase.setArchiveReason(archiveReason != null ? archiveReason : "Statutory archival and Section 65B WORM preservation");
+        aCase.setWormPreserved(true);
+        aCase.setWormPreservedUntil(wormLockUntil);
+        aCase.setWormComplianceToken(wormToken);
+
+        Case savedCase = caseRepository.save(aCase);
+
+        // 5. Apply WORM Object-Lock across all case documents
+        List<Document> documents = documentRepository.findByACaseId(caseId);
+        for (Document doc : documents) {
+            doc.setWormLocked(true);
+            doc.setWormLockUntil(wormLockUntil);
+            doc.setWormRetentionMode(wormModeEffective);
+            doc.setWormLockedBy(archiver);
+            doc.setWormComplianceHash(sha256(doc.getSha256Hash() + "|" + wormLockUntil + "|" + archiver.getUsername()));
+            doc.setLocked(true);
+            if (doc.getLockedAt() == null) {
+                doc.setLockedAt(Instant.now());
+                doc.setLockedBy(archiver);
+            }
+            documentRepository.save(doc);
+        }
+
+        // 6. Log immutable audit trail
+        auditService.logEvent(
+            AuditEventType.STATUS_CHANGE,
+            archiver.getId(),
+            archiver.getUsername(),
+            archiver.getRoles().iterator().next().getName().name(),
+            caseId,
+            "CASE_ARCHIVED_WORM_LOCK",
+            caseId.toString(),
+            "0.0.0.0",
+            null,
+            String.format("Case %s transitioned to ARCHIVED with %s WORM Object-Lock until %s. Token: %s. Documents locked: %d",
+                aCase.getCaseNumber(), wormModeEffective, wormLockUntil, wormToken, documents.size())
+        );
+
+        log.info("Case {} successfully ARCHIVED with WORM preservation token {} (Locked until {})", 
+            aCase.getCaseNumber(), wormToken, wormLockUntil);
+        return savedCase;
+    }
+
+    @Transactional
     public DisposalRecord executeDisposal(UUID caseId, User approver, String method, String notes) {
         Case aCase = caseRepository.findById(caseId)
             .orElseThrow(() -> new SecurityValidationException("Case not found for disposal: " + caseId));
@@ -75,6 +159,27 @@ public class RetentionDisposalService {
                 "Attempted deletion/disposal on active Legal Hold was blocked."
             );
             throw new WorkflowViolationException("Action Blocked by Legal Hold: Case is subject to judicial hold and cannot be disposed.");
+        }
+
+        // Strict WORM Object-Lock Active Retention Veto check
+        if (aCase.isWormPreserved() && aCase.getWormPreservedUntil() != null && aCase.getWormPreservedUntil().isAfter(Instant.now())) {
+            log.error("WORM OBJECT LOCK VETO: Case {} is under active WORM retention until {}", aCase.getCaseNumber(), aCase.getWormPreservedUntil());
+            auditService.logEvent(
+                AuditEventType.SECURITY_ALERT,
+                approver.getId(),
+                approver.getUsername(),
+                approver.getRoles().iterator().next().getName().name(),
+                caseId,
+                "WORM_OBJECT_LOCK_VETO",
+                caseId.toString(),
+                "0.0.0.0",
+                null,
+                "Attempted deletion/disposal on active WORM-preserved case was blocked. Lock active until: " + aCase.getWormPreservedUntil()
+            );
+            throw new WorkflowViolationException(String.format(
+                "Action Blocked by WORM Preservation: Case is under statutory WORM Object-Lock (Token: %s) until %s. Early destruction is strictly prohibited.",
+                aCase.getWormComplianceToken(), aCase.getWormPreservedUntil()
+            ));
         }
 
         // Generate cryptographic Section 65B disposal certificate hash

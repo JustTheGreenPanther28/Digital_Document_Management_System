@@ -33,4 +33,19 @@ public class AdminRolePermissionController {
     public ResponseEntity<List<Permission>> getAllPermissions() {
         return ResponseEntity.ok(permissionRepository.findAll());
     }
+
+    @PutMapping("/roles/{roleId}/permissions")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Role> updateRolePermissions(
+        @PathVariable java.util.UUID roleId,
+        @RequestBody java.util.List<java.util.UUID> permissionIds
+    ) {
+        Role role = roleRepository.findById(roleId)
+            .orElseThrow(() -> new com.sih.casemanagement.common.exception.ResourceNotFoundException("Role not found: " + roleId));
+
+        java.util.List<Permission> perms = permissionRepository.findAllById(permissionIds);
+        role.setPermissions(new java.util.HashSet<>(perms));
+        Role saved = roleRepository.save(role);
+        return ResponseEntity.ok(saved);
+    }
 }

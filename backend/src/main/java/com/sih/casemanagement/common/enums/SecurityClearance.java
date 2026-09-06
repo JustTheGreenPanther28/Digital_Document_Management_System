@@ -2,9 +2,10 @@ package com.sih.casemanagement.common.enums;
 
 public enum SecurityClearance {
     PUBLIC(0),
-    CONFIDENTIAL(1),
-    SECRET(2),
-    TOP_SECRET(3);
+    RESTRICTED(1),
+    CONFIDENTIAL(2),
+    SECRET(3),
+    TOP_SECRET(4);
 
     private final int level;
 

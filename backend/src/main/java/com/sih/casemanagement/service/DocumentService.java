@@ -45,6 +45,9 @@ public class DocumentService {
     private final AbacSecurityService abacSecurity;
     private final ThreatDetectionService threatDetectionService;
 
+    @org.springframework.beans.factory.annotation.Value("${app.security.enforce-duplicate-rejection:true}")
+    private boolean enforceDuplicateRejection;
+
     public DocumentService(
         DocumentRepository documentRepository,
         DocumentVersionRepository versionRepository,
@@ -110,21 +113,16 @@ public class DocumentService {
                 log.warn("Quarantine storage notification: {}", qEx.getMessage());
             }
 
-            SecurityAlert alert = new SecurityAlert(
-                "MALWARE_DETECTED",
-                AlertSeverity.CRITICAL,
-                "Malicious file detected during upload: " + valResult.sanitizedFilename() + " (" + scanResult.details() + ")",
-                ipAddress,
-                uploader.getUsername(),
-                caseId
-            );
-            alertRepository.save(alert);
+            threatDetectionService.recordMalwareAlert(valResult.sanitizedFilename(), scanResult.details(), ipAddress, uploader.getUsername(), caseId);
             throw new SecurityValidationException("Malware detected by system scanner: " + scanResult.details());
         }
 
-        // Step 5: Duplicate detection warning (allowed, but logged)
+        // Step 5: Duplicate detection & enforcement
         if (documentRepository.existsBySha256Hash(valResult.sha256Hash())) {
-            log.info("Duplicate document SHA-256 detected: {}", valResult.sha256Hash());
+            log.warn("Duplicate document SHA-256 detected: {}", valResult.sha256Hash());
+            if (enforceDuplicateRejection) {
+                throw new SecurityValidationException("Duplicate document rejected: File with identical SHA-256 hash already exists in vault repository.");
+            }
         }
 
         // Step 6: Generate AES-256-GCM IV and encrypt

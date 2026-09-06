@@ -59,6 +59,22 @@ public class Document implements Persistable<UUID> {
     @JoinColumn(name = "locked_by")
     private User lockedBy;
 
+    @Column(name = "is_worm_locked", nullable = false)
+    private boolean wormLocked = false;
+
+    @Column(name = "worm_lock_until")
+    private Instant wormLockUntil;
+
+    @Column(name = "worm_retention_mode", length = 30)
+    private String wormRetentionMode = "COMPLIANCE";
+
+    @Column(name = "worm_compliance_hash", length = 64)
+    private String wormComplianceHash;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "worm_locked_by")
+    private User wormLockedBy;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "quarantine_status", nullable = false, length = 20)
     private QuarantineStatus quarantineStatus = QuarantineStatus.CLEAN;
@@ -145,6 +161,21 @@ public class Document implements Persistable<UUID> {
 
     public User getLockedBy() { return lockedBy; }
     public void setLockedBy(User lockedBy) { this.lockedBy = lockedBy; }
+
+    public boolean isWormLocked() { return wormLocked; }
+    public void setWormLocked(boolean wormLocked) { this.wormLocked = wormLocked; }
+
+    public Instant getWormLockUntil() { return wormLockUntil; }
+    public void setWormLockUntil(Instant wormLockUntil) { this.wormLockUntil = wormLockUntil; }
+
+    public String getWormRetentionMode() { return wormRetentionMode; }
+    public void setWormRetentionMode(String wormRetentionMode) { this.wormRetentionMode = wormRetentionMode; }
+
+    public String getWormComplianceHash() { return wormComplianceHash; }
+    public void setWormComplianceHash(String wormComplianceHash) { this.wormComplianceHash = wormComplianceHash; }
+
+    public User getWormLockedBy() { return wormLockedBy; }
+    public void setWormLockedBy(User wormLockedBy) { this.wormLockedBy = wormLockedBy; }
 
     public QuarantineStatus getQuarantineStatus() { return quarantineStatus; }
     public void setQuarantineStatus(QuarantineStatus quarantineStatus) { this.quarantineStatus = quarantineStatus; }

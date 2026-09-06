@@ -39,9 +39,19 @@ public class UserPrincipal implements UserDetails {
         this.enabled = user.isEnabled();
         this.accountNonLocked = !user.isAccountLocked();
         this.mfaEnabled = user.isMfaEnabled();
-        this.authorities = user.getRoles().stream()
-            .map(role -> new SimpleGrantedAuthority("ROLE_" + role.getName().name()))
-            .collect(Collectors.toSet());
+        
+        java.util.Set<GrantedAuthority> auths = new java.util.HashSet<>();
+        if (user.getRoles() != null) {
+            for (var role : user.getRoles()) {
+                auths.add(new SimpleGrantedAuthority("ROLE_" + role.getName().name()));
+                if (role.getPermissions() != null) {
+                    for (var perm : role.getPermissions()) {
+                        auths.add(new SimpleGrantedAuthority(perm.getName()));
+                    }
+                }
+            }
+        }
+        this.authorities = auths;
     }
 
     public UUID getId() { return id; }

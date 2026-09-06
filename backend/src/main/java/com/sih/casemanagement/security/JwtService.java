@@ -102,12 +102,10 @@ public class JwtService {
                 .parseSignedClaims(token)
                 .getPayload();
 
-            // Validate audience if present
-            if (claims.getAudience() != null && !claims.getAudience().isEmpty()) {
-                if (!claims.getAudience().contains(audience)) {
-                    log.warn("JWT audience validation failed: expected {}, received {}", audience, claims.getAudience());
-                    return false;
-                }
+            // Validate audience - mandatory check (fail-closed)
+            if (claims.getAudience() == null || claims.getAudience().isEmpty() || !claims.getAudience().contains(audience)) {
+                log.warn("JWT audience validation failed: expected {}, received {}", audience, claims.getAudience());
+                return false;
             }
             return true;
         } catch (JwtException | IllegalArgumentException ex) {

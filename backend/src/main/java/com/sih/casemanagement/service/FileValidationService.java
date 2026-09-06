@@ -40,6 +40,10 @@ public class FileValidationService {
             throw new SecurityValidationException("File payload is empty.");
         }
 
+        if (fileBytes.length > 52428800) { // 50MB
+            throw new SecurityValidationException("File payload exceeds maximum allowed size of 50MB.");
+        }
+
         // 1. Path Traversal & Filename Sanitization
         String cleanFilename = StringUtils.cleanPath(originalFilename != null ? originalFilename : "unnamed_file");
         if (cleanFilename.contains("..") || cleanFilename.contains("/") || cleanFilename.contains("\\")) {

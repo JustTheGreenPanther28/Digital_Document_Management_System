@@ -7,6 +7,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -30,6 +33,7 @@ public class ThreatDetectionService {
         this.rateLimitingService = rateLimitingService;
     }
 
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void recordDownload(UUID userId, String username, String ipAddress, UUID documentId, UUID caseId) {
         long now = System.currentTimeMillis();
         UserDownloadTracker tracker = downloadTrackers.compute(userId, (k, existing) -> {
@@ -55,6 +59,7 @@ public class ThreatDetectionService {
         }
     }
 
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void recordPrivilegeViolation(UUID userId, String username, String ipAddress, String attemptedAction, String targetResource) {
         log.warn("THREAT ALERT: Privilege escalation attempt by user {} on action {}", username, attemptedAction);
         SecurityAlert alert = new SecurityAlert(
@@ -68,6 +73,7 @@ public class ThreatDetectionService {
         alertRepository.save(alert);
     }
 
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void recordTopSecretAccessAnomaly(UUID userId, String username, String ipAddress, UUID documentId) {
         log.warn("THREAT ALERT: TOP_SECRET document access anomaly by user {}", username);
         SecurityAlert alert = new SecurityAlert(
@@ -81,6 +87,21 @@ public class ThreatDetectionService {
         alertRepository.save(alert);
     }
 
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void recordMalwareAlert(String filename, String details, String ipAddress, String username, UUID caseId) {
+        log.warn("THREAT ALERT: Malware detected in uploaded file: {}", filename);
+        SecurityAlert alert = new SecurityAlert(
+            "MALWARE_DETECTED",
+            AlertSeverity.CRITICAL,
+            String.format("Malicious file detected during upload: %s (%s)", filename, details),
+            ipAddress,
+            username,
+            caseId
+        );
+        alertRepository.save(alert);
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void handleBrokenAuditChain(String tamperPoint, String reason) {
         log.error("CRITICAL SECURITY RESPONSE: Broken audit ledger chain detected at block {}! Triggering automated alert.", tamperPoint);
         SecurityAlert alert = new SecurityAlert(

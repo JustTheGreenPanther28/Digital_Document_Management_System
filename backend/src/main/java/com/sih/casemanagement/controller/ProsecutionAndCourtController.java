@@ -200,4 +200,15 @@ public class ProsecutionAndCourtController {
     public ResponseEntity<List<CourtProceeding>> getCourtHearings(@PathVariable UUID caseId) {
         return ResponseEntity.ok(prosecutionService.getProceedingsForCase(caseId));
     }
+
+    @GetMapping("/approvals")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SENIOR_OFFICER', 'PROSECUTOR', 'AUDITOR')")
+    public ResponseEntity<List<Approval>> getAllApprovals() {
+        return ResponseEntity.ok(prosecutionService.getAllApprovals());
+    }
+
+    @GetMapping("/approvals/entity/{targetEntityId}")
+    public ResponseEntity<List<Approval>> getApprovalsForEntity(@PathVariable UUID targetEntityId) {
+        return ResponseEntity.ok(prosecutionService.getApprovalsForEntity(targetEntityId));
+    }
 }

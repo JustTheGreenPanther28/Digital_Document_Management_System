@@ -34,11 +34,18 @@ public class CaseController {
     private final CaseService caseService;
     private final UserRepository userRepository;
     private final AbacSecurityService abacSecurity;
+    private final com.sih.casemanagement.service.RetentionDisposalService retentionDisposalService;
 
-    public CaseController(CaseService caseService, UserRepository userRepository, AbacSecurityService abacSecurity) {
+    public CaseController(
+        CaseService caseService, 
+        UserRepository userRepository, 
+        AbacSecurityService abacSecurity,
+        com.sih.casemanagement.service.RetentionDisposalService retentionDisposalService
+    ) {
         this.caseService = caseService;
         this.userRepository = userRepository;
         this.abacSecurity = abacSecurity;
+        this.retentionDisposalService = retentionDisposalService;
     }
 
     @GetMapping
@@ -169,5 +176,20 @@ public class CaseController {
         User actor = userRepository.findById(principal.getId()).orElseThrow();
         Case closed = caseService.closeCase(caseId, actor, httpRequest.getRemoteAddr());
         return ResponseEntity.ok(closed);
+    }
+
+    @PostMapping("/{caseId}/archive")
+    @PreAuthorize("hasAnyRole('SENIOR_OFFICER', 'ADMIN', 'AUDITOR')")
+    public ResponseEntity<Case> archiveCase(
+        @PathVariable UUID caseId,
+        @RequestBody(required = false) Map<String, Object> body,
+        @AuthenticationPrincipal UserPrincipal principal
+    ) {
+        User actor = userRepository.findById(principal.getId()).orElseThrow();
+        String reason = body != null && body.containsKey("reason") ? (String) body.get("reason") : "Statutory archival and Section 65B WORM preservation";
+        int retentionYears = body != null && body.containsKey("retentionYears") ? Integer.parseInt(body.get("retentionYears").toString()) : 10;
+        String wormMode = body != null && body.containsKey("wormMode") ? (String) body.get("wormMode") : "COMPLIANCE";
+        Case archived = retentionDisposalService.archiveCase(caseId, actor, reason, retentionYears, wormMode);
+        return ResponseEntity.ok(archived);
     }
 }

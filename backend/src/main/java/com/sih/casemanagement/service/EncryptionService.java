@@ -36,10 +36,15 @@ public class EncryptionService {
     }
 
     public byte[] decrypt(byte[] ciphertext, byte[] iv) {
+        return decrypt(ciphertext, iv, null);
+    }
+
+    public byte[] decrypt(byte[] ciphertext, byte[] iv, String keyId) {
         try {
             Cipher cipher = Cipher.getInstance(ALGORITHM);
             GCMParameterSpec spec = new GCMParameterSpec(TAG_LENGTH_BIT, iv);
-            cipher.init(Cipher.DECRYPT_MODE, kms.getMasterKey(), spec);
+            SecretKey key = (keyId != null) ? kms.getKeyById(keyId) : kms.getMasterKey();
+            cipher.init(Cipher.DECRYPT_MODE, key, spec);
             return cipher.doFinal(ciphertext);
         } catch (GeneralSecurityException e) {
             log.error("Failed to decrypt ciphertext: Authentication tag mismatch or corrupted ciphertext", e);

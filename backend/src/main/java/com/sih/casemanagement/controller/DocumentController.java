@@ -21,6 +21,8 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.sih.casemanagement.common.exception.RateLimitExceededException;
+import com.sih.casemanagement.service.RateLimitingService;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -32,11 +34,13 @@ public class DocumentController {
     private final DocumentService documentService;
     private final UserRepository userRepository;
     private final AbacSecurityService abacSecurity;
+    private final RateLimitingService rateLimitingService;
 
-    public DocumentController(DocumentService documentService, UserRepository userRepository, AbacSecurityService abacSecurity) {
+    public DocumentController(DocumentService documentService, UserRepository userRepository, AbacSecurityService abacSecurity, RateLimitingService rateLimitingService) {
         this.documentService = documentService;
         this.userRepository = userRepository;
         this.abacSecurity = abacSecurity;
+        this.rateLimitingService = rateLimitingService;
     }
 
     @PostMapping(value = "/cases/{caseId}/documents", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -50,6 +54,11 @@ public class DocumentController {
         @AuthenticationPrincipal UserPrincipal principal,
         HttpServletRequest httpRequest
     ) {
+        String clientKey = principal != null ? "upload:user:" + principal.getId() : "upload:ip:" + httpRequest.getRemoteAddr();
+        if (!rateLimitingService.isAllowed(clientKey, 20, 60)) {
+            throw new RateLimitExceededException("Upload rate limit exceeded. Maximum 20 uploads per minute allowed.");
+        }
+
         User uploader = userRepository.findById(principal.getId()).orElseThrow();
         Document doc = documentService.uploadDocument(
             caseId,
@@ -87,6 +96,11 @@ public class DocumentController {
         @AuthenticationPrincipal UserPrincipal principal,
         HttpServletRequest httpRequest
     ) {
+        String clientKey = principal != null ? "download:user:" + principal.getId() : "download:ip:" + httpRequest.getRemoteAddr();
+        if (!rateLimitingService.isAllowed(clientKey, 60, 60)) {
+            throw new RateLimitExceededException("Download rate limit exceeded. Maximum 60 downloads per minute allowed.");
+        }
+
         User user = userRepository.findById(principal.getId()).orElseThrow();
         DocumentService.DownloadPayload payload = documentService.downloadDocument(documentId, user, httpRequest.getRemoteAddr());
 
@@ -112,6 +126,11 @@ public class DocumentController {
         @AuthenticationPrincipal UserPrincipal principal,
         HttpServletRequest httpRequest
     ) {
+        String clientKey = principal != null ? "upload:user:" + principal.getId() : "upload:ip:" + httpRequest.getRemoteAddr();
+        if (!rateLimitingService.isAllowed(clientKey, 20, 60)) {
+            throw new RateLimitExceededException("Upload rate limit exceeded. Maximum 20 uploads per minute allowed.");
+        }
+
         User uploader = userRepository.findById(principal.getId()).orElseThrow();
         Document updated = documentService.createNewVersion(documentId, file, changeSummary, uploader, httpRequest.getRemoteAddr());
         return ResponseEntity.ok(updated);

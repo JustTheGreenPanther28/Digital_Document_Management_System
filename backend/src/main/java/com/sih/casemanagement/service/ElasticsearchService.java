@@ -20,26 +20,65 @@ public class ElasticsearchService {
 
     private final RestTemplate restTemplate;
     private final String elasticsearchUrl;
+    private final String username;
+    private final String password;
     private final ObjectMapper objectMapper;
     private final boolean enabled;
 
     public ElasticsearchService(
         RestTemplateBuilder restTemplateBuilder,
         ObjectMapper objectMapper,
-        @Value("${app.elasticsearch.url:http://localhost:9200}") String elasticsearchUrl,
+        @Value("${app.elasticsearch.url:}") String rawElasticsearchUrl,
+        @Value("${app.elasticsearch.username:}") String usernameProp,
+        @Value("${app.elasticsearch.password:}") String passwordProp,
         @Value("${app.elasticsearch.enabled:true}") boolean enabled
     ) {
         this.restTemplate = restTemplateBuilder
-            .setConnectTimeout(Duration.ofMillis(2000))
-            .setReadTimeout(Duration.ofMillis(3000))
+            .setConnectTimeout(Duration.ofMillis(3000))
+            .setReadTimeout(Duration.ofMillis(4000))
             .build();
-        this.elasticsearchUrl = elasticsearchUrl.endsWith("/") ? elasticsearchUrl.substring(0, elasticsearchUrl.length() - 1) : elasticsearchUrl;
         this.objectMapper = objectMapper;
         this.enabled = enabled;
+
+        String parsedUrl = (rawElasticsearchUrl != null) ? rawElasticsearchUrl.trim() : "";
+        String parsedUser = usernameProp;
+        String parsedPass = passwordProp;
+
+        // Extract user:pass if embedded in URL (e.g. https://user:pass@domain.bonsaisearch.net)
+        if (parsedUrl.contains("@") && parsedUrl.startsWith("http")) {
+            try {
+                java.net.URI uri = new java.net.URI(parsedUrl);
+                if (uri.getUserInfo() != null) {
+                    String[] parts = uri.getUserInfo().split(":", 2);
+                    parsedUser = parts[0];
+                    if (parts.length > 1) parsedPass = parts[1];
+                    parsedUrl = uri.getScheme() + "://" + uri.getHost() + (uri.getPort() > 0 ? ":" + uri.getPort() : "");
+                }
+            } catch (Exception e) {
+                log.warn("Could not parse embedded credentials from elasticsearch url: {}", e.getMessage());
+            }
+        }
+
+        if (parsedUrl.endsWith("/")) {
+            parsedUrl = parsedUrl.substring(0, parsedUrl.length() - 1);
+        }
+
+        this.elasticsearchUrl = parsedUrl;
+        this.username = parsedUser;
+        this.password = parsedPass;
+    }
+
+    private HttpHeaders createHeaders() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        if (username != null && !username.isBlank() && password != null) {
+            headers.setBasicAuth(username, password);
+        }
+        return headers;
     }
 
     public void indexCase(UUID caseId, String caseNumber, String title, String description, String classification) {
-        if (!enabled) return;
+        if (!enabled || elasticsearchUrl.isBlank()) return;
 
         try {
             String url = elasticsearchUrl + "/cases/_doc/" + caseId.toString();
@@ -51,9 +90,7 @@ public class ElasticsearchService {
                 "classification", classification
             );
 
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
+            HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, createHeaders());
 
             restTemplate.put(url, request);
             log.debug("Successfully indexed case {} in Elasticsearch.", caseNumber);
@@ -78,9 +115,7 @@ public class ElasticsearchService {
                 )
             );
 
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            HttpEntity<Map<String, Object>> request = new HttpEntity<>(queryMap, headers);
+            HttpEntity<Map<String, Object>> request = new HttpEntity<>(queryMap, createHeaders());
 
             ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {

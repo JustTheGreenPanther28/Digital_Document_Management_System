@@ -1,5 +1,6 @@
 package com.sih.casemanagement.controller;
 
+import com.sih.casemanagement.entity.Case;
 import com.sih.casemanagement.entity.DisposalRecord;
 import com.sih.casemanagement.entity.RetentionPolicy;
 import com.sih.casemanagement.security.UserPrincipal;
@@ -39,6 +40,19 @@ public class RetentionController {
     @PreAuthorize("hasAnyRole('ADMIN', 'SENIOR_OFFICER', 'AUDITOR', 'EVIDENCE_CUSTODIAN')")
     public ResponseEntity<List<DisposalRecord>> getDisposalRecords() {
         return ResponseEntity.ok(retentionDisposalService.getAllDisposalRecords());
+    }
+
+    @PostMapping("/cases/{caseId}/archive")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SENIOR_OFFICER', 'AUDITOR')")
+    public ResponseEntity<Case> archiveCase(
+        @PathVariable UUID caseId,
+        @RequestBody(required = false) Map<String, Object> body,
+        @AuthenticationPrincipal UserPrincipal principal
+    ) {
+        String reason = body != null && body.containsKey("reason") ? (String) body.get("reason") : "Statutory evidentiary archival";
+        int retentionYears = body != null && body.containsKey("retentionYears") ? Integer.parseInt(body.get("retentionYears").toString()) : 10;
+        String wormMode = body != null && body.containsKey("wormMode") ? (String) body.get("wormMode") : "COMPLIANCE";
+        return ResponseEntity.ok(retentionDisposalService.archiveCase(caseId, principal.getUser(), reason, retentionYears, wormMode));
     }
 
     @PostMapping("/disposals/{caseId}")

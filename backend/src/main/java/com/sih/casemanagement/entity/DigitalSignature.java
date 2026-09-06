@@ -32,6 +32,9 @@ public class DigitalSignature {
     @Column(name = "certificate_serial", nullable = false, length = 100)
     private String certificateSerial;
 
+    @Column(name = "certificate_dn", length = 255)
+    private String certificateDn;
+
     @Column(name = "signed_hash", nullable = false, length = 64)
     private String signedHash;
 
@@ -76,6 +79,9 @@ public class DigitalSignature {
 
     public String getCertificateSerial() { return certificateSerial; }
     public void setCertificateSerial(String certificateSerial) { this.certificateSerial = certificateSerial; }
+
+    public String getCertificateDn() { return certificateDn; }
+    public void setCertificateDn(String certificateDn) { this.certificateDn = certificateDn; }
 
     public String getSignedHash() { return signedHash; }
     public void setSignedHash(String signedHash) { this.signedHash = signedHash; }
