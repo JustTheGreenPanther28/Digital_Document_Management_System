@@ -1,41 +1,55 @@
-# Multi-stage Dockerfile for FORSIC Spring Boot 3 Backend
+# syntax=docker/dockerfile:1
 
-# Stage 1: Build JAR with Maven
+# ============================================================
+# Stage 1: Build
+# ============================================================
 FROM maven:3.9.9-eclipse-temurin-21-alpine AS builder
+
 WORKDIR /build
 
-# Copy POM and download dependencies
-COPY pom.xml ./
-RUN mvn dependency:go-offline -B
+# Copy backend Maven configuration
+COPY backend/pom.xml ./
 
-# Copy source code and build production package
-COPY src ./src
-RUN mvn clean package -DskipTests -B
+# Download dependencies
+RUN mvn -B dependency:go-offline
 
-# Stage 2: Hardened, Non-root Production Runtime
+# Copy backend source
+COPY backend/src ./src
+
+# Build application
+RUN mvn -B clean package -DskipTests
+
+
+# ============================================================
+# Stage 2: Runtime
+# ============================================================
 FROM eclipse-temurin:21-jre-alpine
+
 WORKDIR /app
 
-# Create unprivileged system user
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+# Create non-root user
+RUN addgroup -S appgroup \
+    && adduser -S appuser -G appgroup
 
-# Security & system dependencies
+# Install curl for health check
 RUN apk add --no-cache curl tzdata
 
-# Copy built JAR from builder
-COPY --from=builder /build/target/*.jar app.jar
-RUN chown -R appuser:appgroup /app
+# Copy application JAR
+COPY --from=builder /build/target/*.jar /app/app.jar
+
+# Create storage directory
+RUN mkdir -p /app/storage_vault \
+    && chown -R appuser:appgroup /app
 
 USER appuser
 
-# Health check against Spring Boot Actuator
-HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
-  CMD curl -f http://localhost:8080/actuator/health || exit 1
-
 EXPOSE 8080
 
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+    CMD curl -fsS http://localhost:8080/actuator/health || exit 1
+
 ENTRYPOINT ["java", \
-  "-XX:+UseG1GC", \
-  "-XX:MaxRAMPercentage=75.0", \
-  "-Djava.security.egd=file:/dev/./urandom", \
-  "-jar", "app.jar"]
+    "-XX:+UseG1GC", \
+    "-XX:MaxRAMPercentage=75.0", \
+    "-Djava.security.egd=file:/dev/./urandom", \
+    "-jar", "/app/app.jar"]
