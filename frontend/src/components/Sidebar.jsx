@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { checkCaseAccess } from '../services/abac';
@@ -20,23 +20,44 @@ import {
 
 export const Sidebar = () => {
   const { user, hasRole } = useAuth();
+  const [activeTab, setActiveTab] = useState('operations'); // 'operations' or 'forensics'
 
-  const navigationLinks = [
+  // Admin, Senior Officer, and Auditor retain the tab switcher (Operations | Forensics) like last time
+  const showTabs = hasRole('ADMIN') || hasRole('SENIOR_OFFICER') || hasRole('AUDITOR');
+
+  const operationLinks = [
     { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
     { name: 'Case Dossiers', path: '/cases', icon: Briefcase },
     { name: 'Evidence Locker', path: '/evidence', icon: Package, allowedRoles: ['ADMIN', 'SENIOR_OFFICER'] },
     { name: 'Chain of Custody', path: '/custody', icon: GitCommit },
     { name: 'Document Vault', path: '/documents', icon: FileLock2, allowedRoles: ['ADMIN', 'SENIOR_OFFICER'] },
     { name: 'Court & Legal', path: '/court', icon: Scale },
-    { name: 'Retention & Disposal', path: '/retention-disposal', icon: Archive },
-    { name: 'Global Search', path: '/search', icon: Search },
+  ];
+
+  const forensicLinks = [
     { name: 'Audit & Custody Ledger', path: '/audit', icon: FileCode2, allowedRoles: ['AUDITOR', 'ADMIN', 'SENIOR_OFFICER'] },
     { name: 'Threat Alerts', path: '/security-alerts', icon: ShieldAlert, badge: '2', allowedRoles: ['AUDITOR', 'ADMIN', 'SENIOR_OFFICER'] },
+    { name: 'Retention & Disposal', path: '/retention-disposal', icon: Archive },
+    { name: 'Global Search', path: '/search', icon: Search },
     { name: 'User Directory', path: '/admin/users', icon: Users, allowedRoles: ['ADMIN', 'SENIOR_OFFICER'] },
     { name: 'Role & Permissions', path: '/admin/roles', icon: Key, allowedRoles: ['ADMIN'] },
   ];
 
-  const visibleLinks = navigationLinks.filter(l => {
+  // Lower-level officers see all their authorized functions on one single page
+  const singlePageLinks = [
+    { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
+    { name: 'Case Dossiers', path: '/cases', icon: Briefcase },
+    { name: 'Chain of Custody', path: '/custody', icon: GitCommit },
+    { name: 'Court & Legal', path: '/court', icon: Scale },
+    { name: 'Retention & Disposal', path: '/retention-disposal', icon: Archive },
+    { name: 'Global Search', path: '/search', icon: Search },
+  ];
+
+  const currentLinks = showTabs
+    ? (activeTab === 'operations' ? operationLinks : forensicLinks)
+    : singlePageLinks;
+
+  const visibleLinks = currentLinks.filter(l => {
     if (l.allowedRoles) return l.allowedRoles.some(role => hasRole(role));
     if (l.adminOnly) return hasRole('ADMIN') || hasRole('SENIOR_OFFICER');
     if (l.auditorOnly) return hasRole('AUDITOR') || hasRole('ADMIN') || hasRole('SENIOR_OFFICER');
@@ -58,9 +79,33 @@ export const Sidebar = () => {
   return (
     <aside className="w-64 bg-[#0A0C14] border-r border-white/[0.06] flex flex-col justify-between p-4 flex-shrink-0 min-h-[calc(100vh-3.5rem)] select-none">
       <div className="space-y-4">
-        {/* Unified Navigation List */}
+        {/* 1. Pill Segmented Switcher (Operations | Forensics) - Restored for Admin & Senior Officer */}
+        {showTabs && (
+          <div className="p-1 bg-[#121524] rounded-full flex items-center border border-white/[0.06]">
+            <button
+              onClick={() => setActiveTab('operations')}
+              className={`flex-1 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 ${
+                activeTab === 'operations'
+                  ? 'bg-[#1D223A] text-white shadow-md border border-white/[0.08]'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              Operations
+            </button>
+            <button
+              onClick={() => setActiveTab('forensics')}
+              className={`flex-1 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 ${
+                activeTab === 'forensics'
+                  ? 'bg-[#1D223A] text-white shadow-md border border-white/[0.08]'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              Forensics
+            </button>
+          </div>
+        )}
 
-        {/* 3. Primary Navigation Links */}
+        {/* Primary Navigation Links */}
         <nav className="space-y-1 pt-1">
           {visibleLinks.map((item) => {
             const Icon = item.icon;
