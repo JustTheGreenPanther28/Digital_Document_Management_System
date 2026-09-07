@@ -195,7 +195,10 @@ export const App = () => {
           <Route
             path="/evidence"
             element={
-              <ProtectedLayout>
+              <ProtectedLayout 
+                allowedRoles={['ADMIN', 'SENIOR_OFFICER']} 
+                pageTitle="Central Evidence Locker"
+              >
                 <EvidenceLockerPage />
               </ProtectedLayout>
             }

@@ -33,7 +33,7 @@ export const Sidebar = () => {
   const operationLinks = [
     { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
     { name: 'Case Dossiers', path: '/cases', icon: Briefcase },
-    { name: 'Evidence Locker', path: '/evidence', icon: Package },
+    { name: 'Evidence Locker', path: '/evidence', icon: Package, allowedRoles: ['ADMIN', 'SENIOR_OFFICER'] },
     { name: 'Chain of Custody', path: '/custody', icon: GitCommit },
     { name: 'Document Vault', path: '/documents', icon: FileLock2 },
     { name: 'Court & Legal', path: '/court', icon: Scale },

@@ -38,7 +38,9 @@ import {
   User as UserIcon,
   ShieldAlert,
   Archive,
-  Key
+  Key,
+  RefreshCw,
+  Send
 } from 'lucide-react';
 import { checkCaseAccess, canClearanceAccess, getStoredTeamAssignments as getStoredAbacAssignments } from '../services/abac';
 import { 
@@ -49,8 +51,15 @@ import {
   logCaseStatusChange, 
   logLegalHold,
   logCaseArchived,
-  logWormLockApplied
+  logWormLockApplied,
+  logCustodyTransferRequested
 } from '../services/auditLogger';
+import { 
+  CUSTODY_ELIGIBLE_ROLES, 
+  isRoleEligibleForCustody, 
+  ELIGIBLE_OFFICER_RECIPIENTS, 
+  INELIGIBLE_OFFICERS 
+} from './CustodyTransferPage';
 
 const FALLBACK_CASE_DETAILS = {
   id: '1',
@@ -179,6 +188,17 @@ export const CaseDetailsPage = () => {
     physicalCondition: 'Pristine / Unaltered',
   });
   const [registeringEvidence, setRegisteringEvidence] = useState(false);
+
+  // Custody Transfer state for direct transfer in Case Dossier
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [transferItem, setTransferItem] = useState(null);
+  const [selectedRecipientKey, setSelectedRecipientKey] = useState('custodian');
+  const [customRecipientName, setCustomRecipientName] = useState('');
+  const [customRecipientUsername, setCustomRecipientUsername] = useState('');
+  const [transferReason, setTransferReason] = useState('Forensic Laboratory Examination & Extraction');
+  const [transferSealNumber, setTransferSealNumber] = useState('');
+  const [transferCondition, setTransferCondition] = useState('Tamper-evident evidence pouch sealed and barcoded');
+  const [transferSubmitting, setTransferSubmitting] = useState(false);
 
   // Team Assignment state with Type-to-Search / Type-Custom support
   const [showAssignModal, setShowAssignModal] = useState(false);
@@ -616,6 +636,174 @@ export const CaseDetailsPage = () => {
     }
   };
 
+  const getRecipientChoices = () => {
+    let custom = [];
+    try {
+      const storedUsers = localStorage.getItem('sih_registered_users');
+      if (storedUsers) {
+        const parsed = JSON.parse(storedUsers);
+        if (Array.isArray(parsed)) {
+          custom = parsed.map(u => ({
+            username: u.username,
+            name: u.fullName || u.username,
+            role: u.roles?.[0]?.name || u.roles?.[0] || 'INVESTIGATOR',
+            roleLabel: `${u.fullName || u.username} (${u.department || 'Investigator'})`,
+            badge: u.badgeNumber || 'OFFICER'
+          }));
+        }
+      }
+    } catch (_) {}
+
+    const map = new Map();
+    if (Array.isArray(ELIGIBLE_OFFICER_RECIPIENTS)) {
+      ELIGIBLE_OFFICER_RECIPIENTS.forEach(r => map.set(r.username, r));
+    }
+    custom.forEach(r => {
+      if (typeof isRoleEligibleForCustody === 'function' && isRoleEligibleForCustody(r.role)) {
+        map.set(r.username, r);
+      }
+    });
+
+    return Array.from(map.values());
+  };
+
+  const handleOpenTransferModal = (ev = null) => {
+    const itemToTransfer = ev || evidenceList[0] || null;
+    setTransferItem(itemToTransfer);
+    setTransferSealNumber(`SEAL-${Math.floor(100000 + Math.random() * 900000)}`);
+    setTransferCondition(itemToTransfer?.physicalCondition || 'Tamper-evident anti-static pouch sealed and barcoded');
+    setTransferReason('Forensic Laboratory Examination & Extraction');
+
+    const choices = getRecipientChoices();
+    const otherChoice = choices.find(r => r.username !== user?.username) || choices[0];
+    if (otherChoice) {
+      setSelectedRecipientKey(otherChoice.username);
+    }
+    setShowTransferModal(true);
+  };
+
+  const handleSubmitTransfer = async (e) => {
+    e.preventDefault();
+    if (!transferItem) {
+      alert('Please select an evidence artifact to transfer.');
+      return;
+    }
+
+    const choices = getRecipientChoices();
+    let targetUsername = selectedRecipientKey;
+    let targetOfficerName = 'Authorized Custody Officer';
+
+    if (selectedRecipientKey === 'CUSTOM') {
+      if (!customRecipientName.trim() || !customRecipientUsername.trim()) {
+        alert('Please specify custom recipient officer name and badge username.');
+        return;
+      }
+      targetUsername = customRecipientUsername.trim().toLowerCase();
+      targetOfficerName = customRecipientName.trim();
+    } else {
+      const found = choices.find(r => r.username === selectedRecipientKey);
+      if (found) {
+        targetUsername = found.username;
+        targetOfficerName = found.name;
+      }
+    }
+
+    // Role eligibility check under statutory protocols
+    const recipientLower = (targetUsername + ' ' + targetOfficerName).toLowerCase();
+    const matchedIneligible = Array.isArray(INELIGIBLE_OFFICERS) ? INELIGIBLE_OFFICERS.find(inelig => 
+      recipientLower.includes(inelig.username) || 
+      recipientLower.includes(inelig.name.toLowerCase()) ||
+      recipientLower.includes((inelig.role || '').toLowerCase()) ||
+      recipientLower.includes('prosecutor') ||
+      recipientLower.includes('court') ||
+      recipientLower.includes('auditor') ||
+      recipientLower.includes('registrar')
+    ) : null;
+
+    if (matchedIneligible) {
+      alert(`[ISO/IEC 27037 Compliance Violation]\n\nCustody Handover Blocked: Recipient holds an ineligible role (${matchedIneligible.roleLabel || 'Ineligible Role'}).\n\nUnder statutory forensic chain-of-custody protocols, Prosecutors, Judicial Registrars, and Independent Auditors are legally barred from holding evidence custody.\n\nEligible roles: Evidence Custodians, Forensic Examiners, and Assigned Investigators.`);
+      return;
+    }
+
+    setTransferSubmitting(true);
+
+    const newTransfer = {
+      id: `tr-${Date.now()}`,
+      evidenceId: transferItem.id || transferItem.barcode,
+      evidenceBarcode: transferItem.barcode,
+      evidenceTitle: transferItem.description || transferItem.title || 'Physical Evidence Item',
+      caseNumber: caseData?.caseNumber || transferItem.caseNumber || 'CASE-2026-001',
+      fromUsername: user?.username || 'investigator_a',
+      fromOfficerName: user?.fullName || user?.username || 'Lead Officer',
+      toUsername: targetUsername,
+      toOfficerName: targetOfficerName,
+      reasonForTransfer: transferReason.trim() || 'Custody Handover',
+      physicalCondition: transferCondition.trim() || 'Tamper-evident seal verified intact',
+      sealNumber: transferSealNumber.trim() || `SEAL-${Date.now().toString().slice(-6)}`,
+      transferDate: new Date().toISOString(),
+      status: 'PENDING_ACCEPTANCE'
+    };
+
+    try {
+      await api.initiateCustodyTransfer(newTransfer.evidenceBarcode, {
+        recipientId: newTransfer.toUsername,
+        sealNumber: newTransfer.sealNumber,
+        reason: newTransfer.reasonForTransfer
+      }).catch(() => null);
+
+      // Synchronize into shared custody transfers storage for CustodyTransferPage
+      try {
+        const rawTransfers = localStorage.getItem('sih_custody_transfers');
+        let parsed = { pending: [], accepted: [] };
+        if (rawTransfers) {
+          try { parsed = JSON.parse(rawTransfers); } catch (_) {}
+        }
+        const currentPending = Array.isArray(parsed?.pending) ? parsed.pending : [];
+        const currentAccepted = Array.isArray(parsed?.accepted) ? parsed.accepted : [];
+        const updatedPending = [newTransfer, ...currentPending];
+        localStorage.setItem('sih_custody_transfers', JSON.stringify({
+          pending: updatedPending,
+          accepted: currentAccepted
+        }));
+      } catch (err) {
+        console.error('Failed to sync custody transfer storage', err);
+      }
+
+      // Update evidence item status in current case view
+      const updatedList = evidenceList.map(ev => {
+        if (ev.barcode === transferItem.barcode || ev.id === transferItem.id) {
+          const updatedEv = {
+            ...ev,
+            status: 'PENDING_TRANSFER',
+            pendingTransferTo: targetOfficerName,
+            pendingTransferToUser: targetUsername,
+            lastTransferId: newTransfer.id
+          };
+          saveEvidence(updatedEv);
+          return updatedEv;
+        }
+        return ev;
+      });
+      setEvidenceList(updatedList);
+
+      logCustodyTransferRequested({
+        evidenceBarcode: newTransfer.evidenceBarcode,
+        recipientName: newTransfer.toOfficerName,
+        reason: newTransfer.reasonForTransfer,
+        sealNumber: newTransfer.sealNumber,
+        caseNumber: newTransfer.caseNumber
+      });
+
+      setShowTransferModal(false);
+      alert(`Custody handover dispatched specifically to @${newTransfer.toUsername} (${newTransfer.toOfficerName})!\n\nThis evidence will now appear in @${newTransfer.toUsername}'s incoming queue on the Chain of Custody page and can only be verified and accepted by their authorized digital key.`);
+    } catch (err) {
+      console.error('Custody transfer dispatch note:', err);
+      setShowTransferModal(false);
+    } finally {
+      setTransferSubmitting(false);
+    }
+  };
+
   const handleDownloadDocument = async (doc) => {
     try {
       const isAuthorized = canClearanceAccess(user?.clearance, doc.classification);
@@ -902,6 +1090,7 @@ modification, tamper event, or parity mismatch was detected during verification.
   const isClosedOrArchived = caseData?.status === 'CLOSED' || caseData?.status === 'ARCHIVED';
   const canRegisterEvidence = isCustodyEligible && !isClosedOrArchived;
   const canUploadDocuments = !isAuditor && !isClosedOrArchived;
+  const canInitiateTransfer = isCustodyEligible && !isClosedOrArchived;
 
   return (
     <div className="space-y-6 select-none max-w-7xl mx-auto">
@@ -1078,7 +1267,7 @@ modification, tamper event, or parity mismatch was detected during verification.
       {/* Tab 2: Evidence Locker */}
       {activeTab === 'evidence' && (
         <div className="space-y-4">
-          <div className="flex justify-between items-center">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h3 className="text-sm font-bold text-white uppercase tracking-wider">
                 Registered Evidence Artifacts ({evidenceList.length})
@@ -1087,42 +1276,97 @@ modification, tamper event, or parity mismatch was detected during verification.
                 Physical and digital evidentiary assets recorded in custody ledger
               </p>
             </div>
-            {canRegisterEvidence ? (
-              <button
-                onClick={() => setShowEvidenceModal(true)}
-                className="px-4 py-2 rounded-full bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold transition flex items-center gap-1.5 shadow-lg shadow-violet-600/30"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Register Evidence</span>
-              </button>
-            ) : (
-              <span className="text-[10px] font-mono px-3 py-1 rounded-full bg-slate-800 text-slate-400 border border-slate-700">
-                {isClosedOrArchived ? '🔒 Read-Only (Case Finalized)' : '🔒 Evidence Intake Restricted to Custodial Roles'}
-              </span>
-            )}
+            <div className="flex flex-wrap items-center gap-2">
+              {canRegisterEvidence ? (
+                <button
+                  onClick={() => setShowEvidenceModal(true)}
+                  className="px-4 py-2 rounded-full bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold transition flex items-center gap-1.5 shadow-lg shadow-violet-600/30 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Register Evidence</span>
+                </button>
+              ) : (
+                <span className="text-[10px] font-mono px-3 py-1 rounded-full bg-slate-800 text-slate-400 border border-slate-700">
+                  {isClosedOrArchived ? '🔒 Read-Only (Case Finalized)' : '🔒 Evidence Intake Restricted to Custodial Roles'}
+                </span>
+              )}
+              {canInitiateTransfer && evidenceList.length > 0 && (
+                <button
+                  onClick={() => handleOpenTransferModal(null)}
+                  className="px-4 py-2 rounded-full bg-emerald-600/20 hover:bg-emerald-600 border border-emerald-500/40 text-emerald-300 hover:text-white text-xs font-semibold transition flex items-center gap-1.5 shadow-lg shadow-emerald-600/20 cursor-pointer active:scale-95"
+                >
+                  <GitCommit className="w-3.5 h-3.5" />
+                  <span>Transfer Custody</span>
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {evidenceList.map((ev) => (
-              <div key={ev.id} className="obsidian-card p-5 rounded-3xl space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-mono font-bold text-emerald-400">
-                    {ev.barcode}
-                  </span>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                    {ev.status}
-                  </span>
+              <div key={ev.id || ev.barcode} className="obsidian-card p-5 rounded-3xl space-y-3 flex flex-col justify-between">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-mono font-bold text-emerald-400">
+                      {ev.barcode}
+                    </span>
+                    <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-semibold border ${
+                      ev.status === 'PENDING_TRANSFER'
+                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                        : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                    }`}>
+                      {ev.status || 'IN_CUSTODY'}
+                    </span>
+                  </div>
+
+                  <div>
+                    <h4 className="text-sm font-bold text-white">{ev.description || ev.title}</h4>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Case: <span className="text-slate-200 font-mono font-semibold">{caseData?.caseNumber || ev.caseNumber}</span>
+                    </p>
+                  </div>
+
+                  <div className="p-3 rounded-2xl bg-[#121524] border border-white/[0.04] space-y-1 text-[11px] text-slate-400 font-mono">
+                    <div className="flex justify-between items-center">
+                      <span>Category:</span>
+                      <span className="text-slate-200 font-bold">{ev.itemCategory || 'DOCUMENTARY'}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span>Location:</span>
+                      <span className="text-cyan-300 truncate max-w-[150px]">{ev.storageLocation || 'Vault Alpha - Bin 1'}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span>Custodian:</span>
+                      <span className="text-emerald-400 font-bold truncate max-w-[150px]">{ev.currentCustodian || 'Det. John Miller (Lead)'}</span>
+                    </div>
+                    {ev.status === 'PENDING_TRANSFER' && ev.pendingTransferTo && (
+                      <div className="flex justify-between items-center text-amber-300 pt-1 border-t border-white/[0.04]">
+                        <span>Handover To:</span>
+                        <span className="font-semibold truncate max-w-[150px]">{ev.pendingTransferTo}</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <h4 className="text-xs font-bold text-white">{ev.description}</h4>
-                <div className="p-3 rounded-2xl bg-[#0E111C] text-[11px] font-mono text-slate-400 space-y-1">
-                  <div className="flex justify-between">
-                    <span>Location:</span>
-                    <span className="text-slate-200">{ev.storageLocation}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Custodian:</span>
-                    <span className="text-violet-300 font-bold">{ev.currentCustodian}</span>
-                  </div>
+
+                <div className="mt-2 pt-3 border-t border-white/[0.06] flex items-center justify-between">
+                  <Link
+                    to="/custody"
+                    className="text-xs text-slate-400 hover:text-white flex items-center gap-1 font-medium transition"
+                  >
+                    <span>Custody Ledger</span>
+                    <ArrowUpRight className="w-3.5 h-3.5" />
+                  </Link>
+
+                  <button
+                    type="button"
+                    onClick={() => handleOpenTransferModal(ev)}
+                    disabled={isClosedOrArchived || !canInitiateTransfer}
+                    title={!canInitiateTransfer ? 'Only authorized custody roles may dispatch evidence transfer' : 'Initiate dual-party custody transfer directly from dossier'}
+                    className="px-3.5 py-1.5 rounded-full bg-emerald-600/20 hover:bg-emerald-600 border border-emerald-500/40 text-emerald-300 hover:text-white text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-sm active:scale-95"
+                  >
+                    <GitCommit className="w-3.5 h-3.5" />
+                    <span>Transfer</span>
+                  </button>
                 </div>
               </div>
             ))}
@@ -1668,6 +1912,253 @@ modification, tamper event, or parity mismatch was detected during verification.
                   className="px-5 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold shadow-lg cursor-pointer disabled:opacity-50"
                 >
                   {registeringEvidence ? 'Registering...' : 'Register & Seal'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Direct Custody Handover Modal */}
+      {showTransferModal && createPortal(
+        <div className="fixed inset-0 z-[99999] w-screen h-screen min-h-screen bg-black/95 backdrop-blur-2xl flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-150">
+          <div className="obsidian-card w-full max-w-2xl p-6 rounded-3xl shadow-2xl space-y-4 border border-white/10 my-auto bg-[#0B0D17] text-slate-100">
+            <div className="flex items-center justify-between border-b border-white/[0.08] pb-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1">
+                    <ShieldCheck className="w-3 h-3" />
+                    <span>ISO/IEC 27037 Standard Protocol</span>
+                  </span>
+                </div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2 mt-1">
+                  <GitCommit className="w-5 h-5 text-emerald-400" />
+                  <span>Dispatch Evidence Custody Handover</span>
+                </h3>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setShowTransferModal(false)} 
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmitTransfer} className="space-y-4">
+              {/* Evidence Artifact Details */}
+              <div className="p-3.5 rounded-2xl bg-[#121524] border border-white/[0.06] space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-400 font-mono">Target Evidence Artifact:</span>
+                  <span className="text-emerald-400 font-mono font-bold">
+                    {transferItem?.barcode || 'Select Evidence Artifact'}
+                  </span>
+                </div>
+                {evidenceList.length > 1 && (
+                  <div>
+                    <label className="text-[10px] font-mono text-slate-400 block mb-1">
+                      Switch Artifact to Transfer:
+                    </label>
+                    <select
+                      value={transferItem?.barcode || ''}
+                      onChange={(e) => {
+                        const found = evidenceList.find(x => x.barcode === e.target.value);
+                        if (found) {
+                          setTransferItem(found);
+                          setTransferCondition(found.physicalCondition || transferCondition);
+                        }
+                      }}
+                      className="w-full px-3 py-1.5 bg-[#0A0C16] border border-white/10 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500 font-mono cursor-pointer"
+                    >
+                      {evidenceList.map(item => (
+                        <option key={item.barcode || item.id} value={item.barcode}>
+                          {item.barcode} • {item.description || item.title} ({item.storageLocation || 'Vault'})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <div className="text-xs text-slate-200 font-medium">
+                  {transferItem?.description || transferItem?.title || 'Physical/Digital Artifact'}
+                </div>
+                <div className="flex items-center gap-3 text-[11px] font-mono text-slate-400">
+                  <span>Case: <strong className="text-slate-200 font-mono">{caseData?.caseNumber}</strong></span>
+                  <span>•</span>
+                  <span>Location: <strong className="text-slate-200">{transferItem?.storageLocation || 'Vault Alpha - Bin 1'}</strong></span>
+                </div>
+              </div>
+
+              {/* Custodial Transfer Flow */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* From Dispatcher */}
+                <div className="p-3 rounded-2xl bg-[#121524] border border-white/[0.06] space-y-1">
+                  <div className="text-[10px] font-mono text-slate-400 uppercase">From: Active Custodian</div>
+                  <div className="text-xs font-bold text-white">@{user?.username || 'officer'}</div>
+                  <div className="text-[11px] text-slate-400">{user?.fullName || 'Active Officer'}</div>
+                </div>
+
+                {/* To Recipient */}
+                <div className="p-3 rounded-2xl bg-[#121524] border border-emerald-500/30 space-y-1">
+                  <div className="text-[10px] font-mono text-emerald-300 font-bold uppercase">To: Recipient Officer *</div>
+                  <select
+                    value={selectedRecipientKey}
+                    onChange={(e) => setSelectedRecipientKey(e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-[#0A0C16] border border-emerald-500/40 rounded-xl text-white text-xs focus:outline-none focus:border-emerald-400 font-mono cursor-pointer"
+                    required
+                  >
+                    <optgroup label="Authorized Custody Officers">
+                      {getRecipientChoices().map((r) => (
+                        <option key={r.username} value={r.username}>
+                          @{r.username} — {r.name} ({r.roleLabel || r.role})
+                        </option>
+                      ))}
+                    </optgroup>
+                    <option value="CUSTOM">+ Custom Officer...</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Custom Recipient Fields */}
+              {selectedRecipientKey === 'CUSTOM' && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-[#121524] rounded-2xl border border-emerald-500/30 animate-in fade-in duration-150">
+                  <div>
+                    <label className="text-[10px] font-mono text-slate-300 block mb-1">Officer Name *</label>
+                    <input
+                      type="text"
+                      required
+                      value={customRecipientName}
+                      onChange={(e) => setCustomRecipientName(e.target.value)}
+                      placeholder="e.g. Inspector Rajesh Kumar"
+                      className="w-full px-3 py-1.5 bg-[#0A0C16] border border-white/10 rounded-xl text-white text-xs focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-mono text-slate-300 block mb-1">Badge UID / Username *</label>
+                    <input
+                      type="text"
+                      required
+                      value={customRecipientUsername}
+                      onChange={(e) => setCustomRecipientUsername(e.target.value)}
+                      placeholder="e.g. rajesh_kumar"
+                      className="w-full px-3 py-1.5 bg-[#0A0C16] border border-white/10 rounded-xl text-white text-xs focus:outline-none focus:border-emerald-500 font-mono"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Seal and Condition */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[11px] font-mono text-slate-300 font-bold uppercase">
+                      Tamper Seal Barcode *
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setTransferSealNumber(`SEAL-${Math.floor(100000 + Math.random() * 900000)}`)}
+                      className="text-[10px] font-mono text-emerald-400 hover:text-emerald-300 flex items-center gap-1 cursor-pointer"
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                      <span>Regen</span>
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    required
+                    value={transferSealNumber}
+                    onChange={(e) => setTransferSealNumber(e.target.value)}
+                    placeholder="e.g. SEAL-829102"
+                    className="w-full px-3 py-2 bg-[#121524] border border-white/[0.08] rounded-xl text-white text-xs font-mono focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-mono text-slate-300 font-bold uppercase block mb-1">
+                    Packaging & Condition *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={transferCondition}
+                    onChange={(e) => setTransferCondition(e.target.value)}
+                    placeholder="e.g. Sealed in anti-static bag"
+                    className="w-full px-3 py-2 bg-[#121524] border border-white/[0.08] rounded-xl text-white text-xs focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+              </div>
+
+              {/* Reason for Handover */}
+              <div>
+                <label className="text-[11px] font-mono text-slate-300 font-bold uppercase block mb-1">
+                  Reason for Custody Transfer *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={transferReason}
+                  onChange={(e) => setTransferReason(e.target.value)}
+                  placeholder="Official justification for evidence handover..."
+                  className="w-full px-3 py-2 bg-[#121524] border border-white/[0.08] rounded-xl text-white text-xs focus:outline-none focus:border-emerald-500 mb-2"
+                />
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    { label: 'Forensic Lab', val: 'Forensic Laboratory Examination & Extraction' },
+                    { label: 'Court Exhibit', val: 'Judicial Court Exhibit Presentation' },
+                    { label: 'Vault Relocation', val: 'High-Security Evidence Vault Relocation' },
+                    { label: 'Discovery Review', val: 'Prosecution Discovery Verification' },
+                  ].map((tag) => (
+                    <button
+                      key={tag.label}
+                      type="button"
+                      onClick={() => setTransferReason(tag.val)}
+                      className={`text-[10px] px-2.5 py-1 rounded-lg border transition cursor-pointer ${
+                        transferReason === tag.val
+                          ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300 font-semibold'
+                          : 'bg-[#121524] hover:bg-[#181D33] border-white/[0.06] text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      {tag.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="p-3 rounded-2xl bg-[#0E111C] border border-white/[0.04] text-[11px] text-slate-400 space-y-1">
+                <p className="text-amber-300 font-semibold flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+                  Dual-Party Cryptographic Handover Protocol:
+                </p>
+                <p>
+                  Dispatching puts this evidence into <span className="text-amber-300 font-mono font-semibold">PENDING_ACCEPTANCE</span> status. Only the designated recipient officer can inspect the seal barcode and sign with their digital key on the Chain of Custody ledger to assume legal custody.
+                </p>
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-white/[0.08]">
+                <button
+                  type="button"
+                  onClick={() => setShowTransferModal(false)}
+                  className="px-4 py-2 rounded-xl bg-[#181D33] text-slate-300 text-xs hover:bg-[#222946] transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={transferSubmitting}
+                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-semibold shadow-lg shadow-emerald-600/30 flex items-center gap-1.5 cursor-pointer disabled:opacity-50 transition"
+                >
+                  {transferSubmitting ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Dispatching Transfer...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-3.5 h-3.5" />
+                      <span>Dispatch Custody Handover</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>

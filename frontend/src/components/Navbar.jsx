@@ -122,7 +122,12 @@ export const Navbar = () => {
     const matchedEv = baseEvidence
       .filter(e => e.barcode?.toLowerCase().includes(q) || e.description?.toLowerCase().includes(q))
       .slice(0, 2)
-      .map(e => ({ type: 'EVIDENCE', title: e.barcode, subtitle: e.description, link: '/evidence' }));
+      .map(e => ({ 
+        type: 'EVIDENCE', 
+        title: e.barcode, 
+        subtitle: e.description, 
+        link: (hasRole('ADMIN') || hasRole('SENIOR_OFFICER')) ? '/evidence' : (e.caseId ? `/cases/${e.caseId}` : '/cases')
+      }));
 
     const matchedDocs = baseDocs
       .filter(d => d.title?.toLowerCase().includes(q) || d.originalFilename?.toLowerCase().includes(q))

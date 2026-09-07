@@ -979,7 +979,7 @@ export const DashboardPage = () => {
                       <Lock className="w-3 h-3 text-slate-600" />
                     </button>
                     <button
-                      onClick={() => navigate('/evidence')}
+                      onClick={() => navigate((hasRole('ADMIN') || hasRole('SENIOR_OFFICER')) ? '/evidence' : '/custody')}
                       className="w-full py-2.5 px-4 rounded-2xl bg-[#141829]/80 hover:bg-[#1A2035] border border-white/10 text-white font-semibold text-xs transition flex items-center justify-center gap-2 cursor-pointer"
                     >
                       <Package className="w-3.5 h-3.5 text-violet-300" />
@@ -998,7 +998,7 @@ export const DashboardPage = () => {
                       <Lock className="w-3 h-3 text-slate-600" />
                     </button>
                     <button
-                      onClick={() => navigate('/evidence')}
+                      onClick={() => navigate((hasRole('ADMIN') || hasRole('SENIOR_OFFICER')) ? '/evidence' : '/cases')}
                       className="w-full py-2.5 px-4 rounded-2xl bg-[#141829]/80 hover:bg-[#1A2035] border border-white/10 text-white font-semibold text-xs transition flex items-center justify-center gap-2 cursor-pointer"
                     >
                       <Fingerprint className="w-3.5 h-3.5 text-violet-300" />
@@ -1247,7 +1247,7 @@ export const DashboardPage = () => {
                           Assign Lead
                         </button>
                         <button 
-                          onClick={() => navigate('/evidence')}
+                          onClick={() => navigate((hasRole('ADMIN') || hasRole('SENIOR_OFFICER')) ? '/evidence' : (activeCaseId ? `/cases/${activeCaseId}` : '/cases'))}
                           className="px-4 py-2 rounded-xl bg-[#181D33] hover:bg-[#202744] border border-white/[0.08] text-slate-300 hover:text-white text-xs font-semibold transition cursor-pointer"
                         >
                           Inspect Locker
@@ -1307,7 +1307,7 @@ export const DashboardPage = () => {
                           Forensic Analysis
                         </button>
                         <button 
-                          onClick={() => navigate('/evidence')}
+                          onClick={() => navigate((hasRole('ADMIN') || hasRole('SENIOR_OFFICER')) ? '/evidence' : (activeCaseId ? `/cases/${activeCaseId}` : '/cases'))}
                           className="px-4 py-2 rounded-xl bg-[#181D33] hover:bg-[#202744] border border-white/[0.08] text-slate-300 hover:text-white text-xs font-semibold transition cursor-pointer"
                         >
                           Evidence Artifacts
@@ -1323,7 +1323,7 @@ export const DashboardPage = () => {
                           View Dossier
                         </button>
                         <button 
-                          onClick={() => navigate('/evidence')}
+                          onClick={() => navigate((hasRole('ADMIN') || hasRole('SENIOR_OFFICER')) ? '/evidence' : (activeCaseId ? `/cases/${activeCaseId}` : '/custody'))}
                           className="px-4 py-2 rounded-xl bg-[#181D33] hover:bg-[#202744] border border-white/[0.08] text-slate-300 hover:text-white text-xs font-semibold transition cursor-pointer"
                         >
                           Inspect Locker
