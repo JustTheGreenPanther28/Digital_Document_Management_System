@@ -206,7 +206,10 @@ export const App = () => {
           <Route
             path="/documents"
             element={
-              <ProtectedLayout>
+              <ProtectedLayout 
+                allowedRoles={['ADMIN', 'SENIOR_OFFICER']} 
+                pageTitle="Central Document Vault"
+              >
                 <DocumentVaultPage />
               </ProtectedLayout>
             }

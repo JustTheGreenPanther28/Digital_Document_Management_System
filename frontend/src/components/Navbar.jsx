@@ -132,7 +132,12 @@ export const Navbar = () => {
     const matchedDocs = baseDocs
       .filter(d => d.title?.toLowerCase().includes(q) || d.originalFilename?.toLowerCase().includes(q))
       .slice(0, 2)
-      .map(d => ({ type: 'DOCUMENT', title: d.title, subtitle: 'Vault Document', link: '/documents' }));
+      .map(d => ({ 
+        type: 'DOCUMENT', 
+        title: d.title, 
+        subtitle: 'Vault Document', 
+        link: (hasRole('ADMIN') || hasRole('SENIOR_OFFICER')) ? '/documents' : (d.caseId ? `/cases/${d.caseId}` : '/cases')
+      }));
 
     return [...matchedCases, ...matchedEv, ...matchedDocs];
   };

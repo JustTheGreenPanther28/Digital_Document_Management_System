@@ -752,7 +752,7 @@ export const DashboardPage = () => {
             icon = Key;
             category = 'Digital Evidence';
             title = 'Document Vault';
-            link = '/documents';
+            link = (hasRole('ADMIN') || hasRole('SENIOR_OFFICER')) ? '/documents' : '/cases';
             metricLabel = 'PKI Standard';
             metricValue = 'RSA-2048';
             subtext = 'X.509 Sealed Artifacts';
@@ -761,7 +761,7 @@ export const DashboardPage = () => {
             icon = FileText;
             category = 'Judicial Exhibits';
             title = 'Evidence Vault';
-            link = '/documents';
+            link = (hasRole('ADMIN') || hasRole('SENIOR_OFFICER')) ? '/documents' : '/court';
             metricLabel = 'Court Readiness';
             metricValue = '100%';
             subtext = 'Public Evidence Ready';
@@ -779,7 +779,7 @@ export const DashboardPage = () => {
             icon = FileCheck;
             category = 'Forensic Artifacts';
             title = 'Document Vault';
-            link = '/documents';
+            link = (hasRole('ADMIN') || hasRole('SENIOR_OFFICER')) ? '/documents' : '/cases';
             metricLabel = 'Report Status';
             metricValue = 'AES-256';
             subtext = 'Tamper-Sealed Files';
@@ -925,7 +925,7 @@ export const DashboardPage = () => {
                       <span>Court Proceedings</span>
                     </button>
                     <button
-                      onClick={() => navigate('/documents')}
+                      onClick={() => navigate((hasRole('ADMIN') || hasRole('SENIOR_OFFICER')) ? '/documents' : '/court')}
                       className="w-full py-2.5 px-4 rounded-2xl bg-[#141829]/80 hover:bg-[#1A2035] border border-white/10 text-white font-semibold text-xs transition flex items-center justify-center gap-2 cursor-pointer"
                     >
                       <FileText className="w-3.5 h-3.5 text-violet-300" />
@@ -942,7 +942,7 @@ export const DashboardPage = () => {
                       <span>Court Hearings & 65B</span>
                     </button>
                     <button
-                      onClick={() => navigate('/documents')}
+                      onClick={() => navigate((hasRole('ADMIN') || hasRole('SENIOR_OFFICER')) ? '/documents' : (activeCaseId ? `/cases/${activeCaseId}` : '/cases'))}
                       className="w-full py-2.5 px-4 rounded-2xl bg-[#141829]/80 hover:bg-[#1A2035] border border-white/10 text-white font-semibold text-xs transition flex items-center justify-center gap-2 cursor-pointer"
                     >
                       <Key className="w-3.5 h-3.5 text-violet-300" />
@@ -1262,7 +1262,7 @@ export const DashboardPage = () => {
                           Review Dossier
                         </button>
                         <button 
-                          onClick={() => navigate('/documents')}
+                          onClick={() => navigate((hasRole('ADMIN') || hasRole('SENIOR_OFFICER')) ? '/documents' : (activeCaseId ? `/cases/${activeCaseId}` : '/cases'))}
                           className="px-4 py-2 rounded-xl bg-[#181D33] hover:bg-[#202744] border border-white/[0.08] text-slate-300 hover:text-white text-xs font-semibold transition cursor-pointer"
                         >
                           Examine Evidence
@@ -1277,7 +1277,7 @@ export const DashboardPage = () => {
                           View Court File
                         </button>
                         <button 
-                          onClick={() => navigate('/documents')}
+                          onClick={() => navigate((hasRole('ADMIN') || hasRole('SENIOR_OFFICER')) ? '/documents' : (activeCaseId ? `/cases/${activeCaseId}` : '/court'))}
                           className="px-4 py-2 rounded-xl bg-[#181D33] hover:bg-[#202744] border border-white/[0.08] text-slate-300 hover:text-white text-xs font-semibold transition cursor-pointer"
                         >
                           Public Exhibits

@@ -35,7 +35,7 @@ export const Sidebar = () => {
     { name: 'Case Dossiers', path: '/cases', icon: Briefcase },
     { name: 'Evidence Locker', path: '/evidence', icon: Package, allowedRoles: ['ADMIN', 'SENIOR_OFFICER'] },
     { name: 'Chain of Custody', path: '/custody', icon: GitCommit },
-    { name: 'Document Vault', path: '/documents', icon: FileLock2 },
+    { name: 'Document Vault', path: '/documents', icon: FileLock2, allowedRoles: ['ADMIN', 'SENIOR_OFFICER'] },
     { name: 'Court & Legal', path: '/court', icon: Scale },
   ];
 
