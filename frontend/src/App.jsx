@@ -154,12 +154,25 @@ const ProtectedLayout = ({ children, allowedRoles, pageTitle }) => {
   );
 };
 
+const RootRedirect = () => {
+  const { isAuthenticated, loading } = useAuth();
+  if (loading) return null;
+  return isAuthenticated ? <Navigate to="/dashboard" replace /> : <Navigate to="/login" replace />;
+};
+
+const PublicLoginRoute = () => {
+  const { isAuthenticated, loading } = useAuth();
+  if (loading) return null;
+  return isAuthenticated ? <Navigate to="/dashboard" replace /> : <LoginPage />;
+};
+
 export const App = () => {
   return (
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-          <Route path="/login" element={<LoginPage />} />
+          <Route path="/" element={<RootRedirect />} />
+          <Route path="/login" element={<PublicLoginRoute />} />
           <Route
             path="/dashboard"
             element={
@@ -282,7 +295,7 @@ export const App = () => {
               </ProtectedLayout>
             }
           />
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          <Route path="*" element={<RootRedirect />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

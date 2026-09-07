@@ -34,6 +34,13 @@ async function request(endpoint, options = {}) {
   });
 
   if (!res.ok) {
+    if (res.status === 401 && !endpoint.includes('/auth/login')) {
+      clearAuthToken();
+      clearStoredUser();
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
+    }
     let errorMessage = `Request failed with status ${res.status}`;
     try {
       const errorData = await res.json();

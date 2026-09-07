@@ -4,7 +4,8 @@ import { api, getAuthToken, setAuthToken, clearAuthToken, getStoredUser, setStor
 const AuthContext = createContext(null);
 
 export const DEMO_ACCOUNTS = [
-  { username: 'admin', role: 'ADMIN', clearance: 'TOP_SECRET', name: 'Superintendent Vance (Admin)', desc: 'System administrator & security auditor', password: 'Password@2026!' },
+  { username: 'ADMIN', role: 'ADMIN', clearance: 'TOP_SECRET', name: 'Chief System Administrator', desc: 'System administrator & security auditor', password: 'Admin@2026' },
+  { username: 'admin', role: 'ADMIN', clearance: 'TOP_SECRET', name: 'Chief System Administrator', desc: 'System administrator & security auditor', password: 'Admin@2026' },
   { username: 'senior_officer', role: 'SENIOR_OFFICER', clearance: 'TOP_SECRET', name: 'Commissioner Sterling', desc: 'Case authorizer & supervisory team assigner', password: 'Password@2026!' },
   { username: 'investigator_a', role: 'INVESTIGATOR', clearance: 'SECRET', name: 'Det. John Miller (Lead)', desc: 'Assigned Lead Investigator on CASE-2026-001', password: 'Password@2026!' },
   { username: 'investigator_b', role: 'INVESTIGATOR', clearance: 'CONFIDENTIAL', name: 'Det. Sarah Connor', desc: 'Investigator without assignment to Case 1 (Tests ABAC)', password: 'Password@2026!' },
@@ -205,7 +206,7 @@ export const AuthProvider = ({ children }) => {
     try {
       const allAccs = getAvailableAccounts();
       const matched = allAccs.find(a => a.username === username);
-      const pass = matched?.password || 'Password@2026!';
+      const pass = (username?.toLowerCase() === 'admin') ? 'Admin@2026' : (matched?.password || 'Password@2026!');
       const res = await login(username, pass);
       return res?.success === true;
     } catch (err) {
