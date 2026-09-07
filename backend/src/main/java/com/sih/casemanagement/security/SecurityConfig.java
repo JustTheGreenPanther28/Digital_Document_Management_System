@@ -31,89 +31,84 @@ import java.util.List;
 @EnableMethodSecurity
 public class SecurityConfig {
 
-    private final JwtAuthenticationFilter jwtAuthFilter;
-    private final CustomUserDetailsService userDetailsService;
+	private final JwtAuthenticationFilter jwtAuthFilter;
+	private final CustomUserDetailsService userDetailsService;
 
-    @Value("${app.security.cors.allowed-origins:https://digital-document-management-system-nine.vercel.app}")
-    private String allowedOrigins;
+	@Value("${app.security.cors.allowed-origins:https://digital-document-management-system-nine.vercel.app}")
+	private String allowedOrigins;
 
-    public SecurityConfig(JwtAuthenticationFilter jwtAuthFilter, CustomUserDetailsService userDetailsService) {
-        this.jwtAuthFilter = jwtAuthFilter;
-        this.userDetailsService = userDetailsService;
-    }
+	public SecurityConfig(JwtAuthenticationFilter jwtAuthFilter, CustomUserDetailsService userDetailsService) {
+		this.jwtAuthFilter = jwtAuthFilter;
+		this.userDetailsService = userDetailsService;
+	}
 
-    @Bean
-    public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder(12);
-    }
+	@Bean
+	public PasswordEncoder passwordEncoder() {
+		return new BCryptPasswordEncoder(12);
+	}
 
-    @Bean
-    public AuthenticationProvider authenticationProvider() {
-        DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider();
-        authProvider.setUserDetailsService(userDetailsService);
-        authProvider.setPasswordEncoder(passwordEncoder());
-        return authProvider;
-    }
+	@Bean
+	public AuthenticationProvider authenticationProvider() {
+		DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider();
+		authProvider.setUserDetailsService(userDetailsService);
+		authProvider.setPasswordEncoder(passwordEncoder());
+		return authProvider;
+	}
 
-    @Bean
-    public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
-        return config.getAuthenticationManager();
-    }
+	@Bean
+	public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
+		return config.getAuthenticationManager();
+	}
 
-    @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        http
-            .csrf(AbstractHttpConfigurer::disable)
-            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-            .exceptionHandling(ex -> ex
-                .authenticationEntryPoint((request, response, authException) -> {
-                    response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-                    response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-                    response.getWriter().write("{\"status\":401,\"error\":\"Unauthorized\",\"message\":\"Authentication is required or token is invalid.\"}");
-                })
-            )
-            .headers(headers -> headers
-                .frameOptions(HeadersConfigurer.FrameOptionsConfig::deny)
-                .contentTypeOptions(HeadersConfigurer.ContentTypeOptionsConfig::and)
-                .httpStrictTransportSecurity(hsts -> hsts.includeSubDomains(true).maxAgeInSeconds(31536000))
-                .contentSecurityPolicy(csp -> csp.policyDirectives("default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self' http://localhost:* ws://localhost:* https://localhost:*; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self';"))
-                .referrerPolicy(referrer -> referrer.policy(org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN))
-                .permissionsPolicy(permissions -> permissions.policy("geolocation=(), camera=(), microphone=(), payment=()"))
-            )
-            .authorizeHttpRequests(auth -> auth
-                .requestMatchers(
-                    "/api/v1/auth/**",
-                    "/v3/api-docs/**",
-                    "/swagger-ui/**",
-                    "/swagger-ui.html",
-                    "/actuator/health"
-                ).permitAll()
-                .anyRequest().authenticated()
-            )
-            .authenticationProvider(authenticationProvider())
-            .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+	@Bean
+	public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+		http.csrf(AbstractHttpConfigurer::disable).cors(cors -> cors.configurationSource(corsConfigurationSource()))
+				.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+				.exceptionHandling(ex -> ex.authenticationEntryPoint((request, response, authException) -> {
+					response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+					response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+					response.getWriter().write(
+							"{\"status\":401,\"error\":\"Unauthorized\",\"message\":\"Authentication is required or token is invalid.\"}");
+				}))
+				.headers(headers -> headers.frameOptions(HeadersConfigurer.FrameOptionsConfig::deny)
+						.contentTypeOptions(HeadersConfigurer.ContentTypeOptionsConfig::and)
+						.httpStrictTransportSecurity(hsts -> hsts.includeSubDomains(true).maxAgeInSeconds(31536000))
+						.contentSecurityPolicy(csp -> csp.policyDirectives("default-src 'self'; "
+								+ "script-src 'self'; " + "style-src 'self' https://fonts.googleapis.com; "
+								+ "font-src 'self' https://fonts.gstatic.com data:; " + "img-src 'self' data: blob:; "
+								+ "connect-src 'self' https://digital-document-management-system-nine.vercel.app; "
+								+ "frame-ancestors 'none'; " + "object-src 'none'; " + "base-uri 'self'; "
+								+ "form-action 'self';"))
+						.referrerPolicy(referrer -> referrer.policy(
+								org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN))
+						.permissionsPolicy(permissions -> permissions
+								.policy("geolocation=(), camera=(), microphone=(), payment=()")))
+				.authorizeHttpRequests(
+						auth -> auth
+								.requestMatchers("/api/v1/auth/**", "/v3/api-docs/**", "/swagger-ui/**",
+										"/swagger-ui.html", "/actuator/health")
+								.permitAll().anyRequest().authenticated())
+				.authenticationProvider(authenticationProvider())
+				.addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
-        return http.build();
-    }
+		return http.build();
+	}
 
-    @Bean
-    public CorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration config = new CorsConfiguration();
-        List<String> origins = Arrays.stream(allowedOrigins.split(","))
-            .map(String::trim)
-            .filter(s -> !s.isEmpty())
-            .toList();
-        config.setAllowedOriginPatterns(origins);
-        config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Requested-With", "Accept", "Origin", "X-CSRF-Token"));
-        config.setExposedHeaders(List.of("Authorization", "Content-Disposition"));
-        config.setAllowCredentials(true);
-        config.setMaxAge(3600L);
+	@Bean
+	public CorsConfigurationSource corsConfigurationSource() {
+		CorsConfiguration config = new CorsConfiguration();
+		List<String> origins = Arrays.stream(allowedOrigins.split(",")).map(String::trim).filter(s -> !s.isEmpty())
+				.toList();
+		config.setAllowedOriginPatterns(origins);
+		config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+		config.setAllowedHeaders(
+				List.of("Authorization", "Content-Type", "X-Requested-With", "Accept", "Origin", "X-CSRF-Token"));
+		config.setExposedHeaders(List.of("Authorization", "Content-Disposition"));
+		config.setAllowCredentials(true);
+		config.setMaxAge(3600L);
 
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", config);
-        return source;
-    }
+		UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+		source.registerCorsConfiguration("/**", config);
+		return source;
+	}
 }
-
