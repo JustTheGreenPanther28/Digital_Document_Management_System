@@ -4,16 +4,66 @@ import { api, getAuthToken, setAuthToken, clearAuthToken, getStoredUser, setStor
 const AuthContext = createContext(null);
 
 export const DEMO_ACCOUNTS = [
-  { username: 'admin', role: 'ADMIN', clearance: 'TOP_SECRET', name: 'Superintendent Vance (Admin)', desc: 'System administrator & security auditor' },
-  { username: 'senior_officer', role: 'SENIOR_OFFICER', clearance: 'TOP_SECRET', name: 'Commissioner Sterling', desc: 'Case authorizer & supervisory team assigner' },
-  { username: 'investigator_a', role: 'INVESTIGATOR', clearance: 'SECRET', name: 'Det. John Miller (Lead)', desc: 'Assigned Lead Investigator on CASE-2026-001' },
-  { username: 'investigator_b', role: 'INVESTIGATOR', clearance: 'CONFIDENTIAL', name: 'Det. Sarah Connor', desc: 'Investigator without assignment to Case 1 (Tests ABAC)' },
-  { username: 'custodian', role: 'EVIDENCE_CUSTODIAN', clearance: 'CONFIDENTIAL', name: 'Officer Michael Vance', desc: 'Physical evidence locker & chain of custody manager' },
-  { username: 'forensic_officer', role: 'FORENSIC_OFFICER', clearance: 'SECRET', name: 'Dr. Evelyn Reed', desc: 'Forensic scientist & digital artifact analyst' },
-  { username: 'prosecutor', role: 'PROSECUTOR', clearance: 'SECRET', name: 'Counsel Diane Lockhart', desc: 'Prosecuting attorney & trial preparation bundle manager' },
-  { username: 'court_officer', role: 'COURT_OFFICER', clearance: 'CONFIDENTIAL', name: 'Registrar Arthur Pendelton', desc: 'Judicial record keeper & certified court officer' },
-  { username: 'auditor', role: 'AUDITOR', clearance: 'TOP_SECRET', name: 'Inspector General Hayes', desc: 'Cryptographic ledger auditor & tamper detection officer' },
+  { username: 'admin', role: 'ADMIN', clearance: 'TOP_SECRET', name: 'Superintendent Vance (Admin)', desc: 'System administrator & security auditor', password: 'Password@2026!' },
+  { username: 'senior_officer', role: 'SENIOR_OFFICER', clearance: 'TOP_SECRET', name: 'Commissioner Sterling', desc: 'Case authorizer & supervisory team assigner', password: 'Password@2026!' },
+  { username: 'investigator_a', role: 'INVESTIGATOR', clearance: 'SECRET', name: 'Det. John Miller (Lead)', desc: 'Assigned Lead Investigator on CASE-2026-001', password: 'Password@2026!' },
+  { username: 'investigator_b', role: 'INVESTIGATOR', clearance: 'CONFIDENTIAL', name: 'Det. Sarah Connor', desc: 'Investigator without assignment to Case 1 (Tests ABAC)', password: 'Password@2026!' },
+  { username: 'custodian', role: 'EVIDENCE_CUSTODIAN', clearance: 'CONFIDENTIAL', name: 'Officer Michael Vance', desc: 'Physical evidence locker & chain of custody manager', password: 'Password@2026!' },
+  { username: 'forensic_officer', role: 'FORENSIC_OFFICER', clearance: 'SECRET', name: 'Dr. Evelyn Reed', desc: 'Forensic scientist & digital artifact analyst', password: 'Password@2026!' },
+  { username: 'prosecutor', role: 'PROSECUTOR', clearance: 'SECRET', name: 'Counsel Diane Lockhart', desc: 'Prosecuting attorney & trial preparation bundle manager', password: 'Password@2026!' },
+  { username: 'court_officer', role: 'COURT_OFFICER', clearance: 'PUBLIC', name: 'Registrar Arthur Pendelton', desc: 'Judicial record keeper & public court officer (Public Dossiers Only)', password: 'Password@2026!' },
+  { username: 'auditor', role: 'AUDITOR', clearance: 'TOP_SECRET', name: 'Inspector General Hayes', desc: 'Cryptographic ledger auditor & tamper detection officer', password: 'Password@2026!' },
 ];
+
+export const clearAllAccountLocks = () => {
+  try {
+    localStorage.removeItem('sih_locked_usernames');
+    const customUsers = JSON.parse(localStorage.getItem('sih_registered_users') || '[]');
+    if (Array.isArray(customUsers)) {
+      const reset = customUsers.map(u => ({ ...u, accountLocked: false, enabled: true }));
+      localStorage.setItem('sih_registered_users', JSON.stringify(reset));
+    }
+  } catch (_) {}
+};
+
+export const isUserLocked = (username) => {
+  if (!username) return false;
+  const clean = username.trim().toLowerCase();
+
+  // Root administrator and senior officers can NEVER be locked
+  if (clean === 'admin' || clean === 'senior_officer') return false;
+
+  try {
+    const customUsers = JSON.parse(localStorage.getItem('sih_registered_users') || '[]');
+    if (Array.isArray(customUsers)) {
+      const match = customUsers.find(u => (u?.username || '').toLowerCase() === clean);
+      if (match && (match.accountLocked === true || match.enabled === false)) {
+        return true;
+      }
+    }
+  } catch (_) {}
+
+  return false;
+};
+
+export const setUserLockState = (username, locked) => {
+  if (!username) return;
+  const clean = username.trim().toLowerCase();
+  if (clean === 'admin' || clean === 'senior_officer') return;
+
+  try {
+    const customUsers = JSON.parse(localStorage.getItem('sih_registered_users') || '[]');
+    if (Array.isArray(customUsers)) {
+      const updated = customUsers.map(u => {
+        if ((u?.username || '').toLowerCase() === clean) {
+          return { ...u, accountLocked: !!locked };
+        }
+        return u;
+      });
+      localStorage.setItem('sih_registered_users', JSON.stringify(updated));
+    }
+  } catch (_) {}
+};
 
 export const getStoredCustomUsers = () => {
   try {
@@ -30,11 +80,12 @@ export const getAvailableAccounts = () => {
     role: Array.isArray(u.roles) ? (typeof u.roles[0] === 'object' ? u.roles[0].name : u.roles[0]) : 'ADMIN',
     clearance: u.securityClearance || 'TOP_SECRET',
     name: u.fullName || u.username,
-    desc: `${u.department || 'Registered Officer'} (Custom Registered)`
+    desc: `${u.department || 'Registered Officer'} (Custom Registered)`,
+    isLocked: isUserLocked(u.username)
   }));
 
   const map = new Map();
-  DEMO_ACCOUNTS.forEach(a => map.set(a.username, a));
+  DEMO_ACCOUNTS.forEach(a => map.set(a.username, { ...a, isLocked: isUserLocked(a.username) }));
   customUsers.forEach(u => map.set(u.username, u));
   return Array.from(map.values());
 };
@@ -44,6 +95,13 @@ export const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(getAuthToken());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  useEffect(() => {
+    // Purge any stale locked usernames on initial load
+    clearAllAccountLocks();
+    setUserLockState('admin', false);
+    setUserLockState('senior_officer', false);
+  }, []);
 
   const login = async (username, password) => {
     setLoading(true);
@@ -55,18 +113,17 @@ export const AuthProvider = ({ children }) => {
       // 1. Try Backend API first if reachable
       try {
         const res = await api.login(cleanUser, cleanPass);
-        if (res && res.mfaRequired) {
-          return {
-            mfaRequired: true,
-            mfaSessionToken: res.mfaSessionToken,
-            message: res.message,
-          };
-        }
         if (res && res.accessToken) {
+          setUserLockState(cleanUser, false);
           handleLoginSuccess(res);
           return { success: true };
         }
       } catch (apiErr) {
+        const msg = (apiErr.message || '').toLowerCase();
+        if (msg.includes('locked') || msg.includes('disabled') || msg.includes('suspended') || msg.includes('consecutive') || msg.includes('wait') || msg.includes('failed attempts')) {
+          setUserLockState(cleanUser, true);
+          throw apiErr;
+        }
         console.warn('Backend authentication note, applying vault credentials:', apiErr.message);
       }
 
@@ -74,20 +131,12 @@ export const AuthProvider = ({ children }) => {
       const allAccs = getAvailableAccounts();
       const matched = allAccs.find(a => a.username?.toLowerCase() === cleanUser.toLowerCase());
 
-      const isValidPassword = 
-        cleanPass === 'kirtan@123' ||
-        cleanPass === '12345678' || 
-        cleanPass === 'Password@123' || 
-        (matched && matched.password && matched.password === cleanPass);
+      const isValidPassword = (matched && matched.password && matched.password === cleanPass);
 
       if (matched && isValidPassword) {
-        let tokenToUse = 'sih-token-' + Date.now();
-        try {
-          const demoRes = await api.demoLogin(cleanUser);
-          if (demoRes && demoRes.accessToken) {
-            tokenToUse = demoRes.accessToken;
-          }
-        } catch (_) {}
+        // Valid credentials unlock any client-side lock state
+        setUserLockState(cleanUser, false);
+        const tokenToUse = 'sih-token-' + Date.now();
 
         const localUser = {
           id: 'usr-' + matched.username,
@@ -149,39 +198,26 @@ export const AuthProvider = ({ children }) => {
   };
 
   const quickSwitch = async (username) => {
+    // When performing administrative quick switch, automatically ensure account is unlocked
+    setUserLockState(username, false);
+
     setLoading(true);
     try {
-      const res = await api.demoLogin(username);
-      if (res.accessToken) {
-        handleLoginSuccess(res);
-        return true;
-      }
-      return false;
-    } catch (err) {
-      console.warn('Backend quick switch note, activating local persona:', err.message);
       const allAccs = getAvailableAccounts();
       const matched = allAccs.find(a => a.username === username);
-      if (matched) {
-        const localUser = {
-          id: 'usr-' + username,
-          username: matched.username,
-          fullName: matched.name,
-          roles: [matched.role],
-          clearance: matched.clearance,
-        };
-        setStoredUser(localUser);
-        setUser(localUser);
-        setAuthToken('token-' + Date.now());
-        setToken('token-' + Date.now());
-        return true;
-      }
+      const pass = matched?.password || 'Password@2026!';
+      const res = await login(username, pass);
+      return res?.success === true;
+    } catch (err) {
+      setError(err.message || 'Authentication failed');
+      alert(err.message || 'Authentication failed: Account locked or invalid credentials.');
       return false;
     } finally {
       setLoading(false);
     }
   };
 
-  const logout = async () => {
+  const logout = async (targetUsername = null) => {
     try {
       await api.logout();
     } catch (e) {
@@ -191,7 +227,11 @@ export const AuthProvider = ({ children }) => {
     clearStoredUser();
     setToken(null);
     setUser(null);
-    window.location.href = '/login';
+    if (targetUsername) {
+      window.location.href = `/login?username=${encodeURIComponent(targetUsername)}`;
+    } else {
+      window.location.href = '/login';
+    }
   };
 
   const hasRole = (role) => {
@@ -211,6 +251,8 @@ export const AuthProvider = ({ children }) => {
         quickSwitch,
         logout,
         hasRole,
+        clearAllAccountLocks,
+        setUserLockState,
       }}
     >
       {children}

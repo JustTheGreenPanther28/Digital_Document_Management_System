@@ -21,7 +21,7 @@ public class KeyManagementService {
     private final SecureRandom secureRandom = new SecureRandom();
 
     public KeyManagementService(
-        @Value("${app.kms.master-key-base64:YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXoxMjM0NTY=}") String masterKeyBase64,
+        @Value("${app.kms.master-key-base64}") String masterKeyBase64,
         @Value("${app.kms.key-id:kms-key-vault-primary}") String keyId
     ) {
         SecretKey initialMasterKey = deriveSecretKey(masterKeyBase64);

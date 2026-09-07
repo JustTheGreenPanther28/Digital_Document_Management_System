@@ -23,19 +23,24 @@ public class QuarantineController {
 
     private final SecurityAlertRepository alertRepository;
     private final AuditService auditService;
+    private final com.sih.casemanagement.service.ObjectStorageService objectStorageService;
 
     public QuarantineController(
         SecurityAlertRepository alertRepository,
-        AuditService auditService
+        AuditService auditService,
+        com.sih.casemanagement.service.ObjectStorageService objectStorageService
     ) {
         this.alertRepository = alertRepository;
         this.auditService = auditService;
+        this.objectStorageService = objectStorageService;
     }
 
     @GetMapping
     @PreAuthorize("hasAnyRole('ADMIN', 'AUDITOR', 'FORENSIC_OFFICER', 'SENIOR_OFFICER')")
     public ResponseEntity<List<SecurityAlert>> getQuarantinedItems() {
-        return ResponseEntity.ok(alertRepository.findAll());
+        return ResponseEntity.ok(alertRepository.findByAlertTypeInOrderByCreatedAtDesc(
+            List.of("MALWARE_DETECTED", "FILE_QUARANTINED")
+        ));
     }
 
     @PostMapping("/{id}/release")

@@ -32,7 +32,7 @@ public class LoginAttemptService {
 
     @Transactional
     public void loginSucceeded(String username) {
-        userRepository.findByUsername(username).ifPresent(user -> {
+        userRepository.findByUsernameIgnoreCase(username).ifPresent(user -> {
             if (user.getFailedLoginAttempts() > 0) {
                 user.setFailedLoginAttempts(0);
                 user.setAccountLocked(false);
@@ -44,7 +44,7 @@ public class LoginAttemptService {
 
     @Transactional
     public void loginFailed(String username) {
-        userRepository.findByUsername(username).ifPresent(user -> {
+        userRepository.findByUsernameIgnoreCase(username).ifPresent(user -> {
             int newAttempts = user.getFailedLoginAttempts() + 1;
             user.setFailedLoginAttempts(newAttempts);
 

@@ -257,3 +257,35 @@ export const logCourtBundleExport = ({
     caseId: caseNumber
   });
 };
+
+export const logCaseArchived = ({
+  caseNumber = 'CASE-2026-001',
+  reason = 'Statutory long-term preservation',
+  retentionYears = 10,
+  wormToken = '',
+  wormLockUntil = ''
+}) => {
+  return logAuditEvent({
+    eventType: 'CASE_ARCHIVED',
+    targetEntity: 'CaseDossier',
+    targetId: caseNumber,
+    actionDetails: `Archived case dossier ${caseNumber} to WORM Immutable Vault for statutory ${retentionYears}-year retention. WORM Token: ${wormToken || 'SEALED'}. Lock active until: ${wormLockUntil || 'Permanent'}. Reason: ${reason}.`,
+    caseId: caseNumber
+  });
+};
+
+export const logWormLockApplied = ({
+  targetEntity = 'Document',
+  targetId = '',
+  caseNumber = 'CASE-2026-001',
+  lockUntil = '',
+  retentionMode = 'COMPLIANCE'
+}) => {
+  return logAuditEvent({
+    eventType: 'WORM_OBJECT_LOCK_APPLIED',
+    targetEntity,
+    targetId,
+    actionDetails: `Applied WORM (Write-Once-Read-Many) ${retentionMode} Object-Lock on ${targetEntity} [${targetId}] in case ${caseNumber}. Guaranteed immutable and deletion-vetoed until ${lockUntil}.`,
+    caseId: caseNumber
+  });
+};

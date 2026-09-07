@@ -158,7 +158,43 @@ public class ObjectStorageService {
                     }
                 } catch (IOException ignored) {}
             }
-            throw new IllegalStateException("Failed to retrieve object from storage: " + ex.getMessage(), ex);
+        throw new IllegalStateException("Failed to retrieve object from storage: " + ex.getMessage(), ex);
+        }
+    }
+
+    public void deleteObject(String bucket, String objectKey) {
+        String targetBucket = (bucket != null) ? bucket : defaultBucket;
+        if (useLocalFs) {
+            try {
+                Path target = Paths.get(localStoragePath, targetBucket, objectKey);
+                Files.deleteIfExists(target);
+            } catch (IOException e) {
+                log.warn("Failed to delete local object: {}", e.getMessage());
+            }
+            return;
+        }
+
+        try {
+            DeleteObjectRequest deleteRequest = DeleteObjectRequest.builder()
+                .bucket(targetBucket)
+                .key(objectKey)
+                .build();
+            s3Client.deleteObject(deleteRequest);
+            log.info("Deleted object {} from bucket {}", objectKey, targetBucket);
+        } catch (Exception ex) {
+            log.warn("Failed to delete object {} from S3: {}", objectKey, ex.getMessage());
+        }
+    }
+
+    public void releaseFromQuarantine(String objectKey, String targetKey) {
+        try {
+            byte[] data = getObject(quarantineBucket, objectKey);
+            storeObject(defaultBucket, targetKey != null ? targetKey : objectKey, data);
+            deleteObject(quarantineBucket, objectKey);
+            log.info("Released object {} from quarantine into primary vault as {}", objectKey, targetKey);
+        } catch (Exception e) {
+            log.error("Failed to release object from quarantine: {}", e.getMessage(), e);
+            throw new IllegalStateException("Failed to release object from quarantine: " + e.getMessage(), e);
         }
     }
 

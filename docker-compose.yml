@@ -56,20 +56,6 @@ services:
       timeout: 5s
       retries: 5
 
-  clamav:
-    image: clamav/clamav:latest
-    container_name: sih190-clamav
-    restart: unless-stopped
-    expose:
-      - "3310"
-    networks:
-      - sih190_internal
-    healthcheck:
-      test: ["CMD-SHELL", "echo PING | nc -w 2 localhost 3310 | grep -q PONG || exit 0"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.12.0
     container_name: sih190-elasticsearch
@@ -108,13 +94,15 @@ services:
       STORAGE_S3_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
       STORAGE_S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
       STORAGE_S3_BUCKET: ${S3_BUCKET_NAME:-sih190-evidence-vault}
-      CLAMAV_HOST: clamav
-      CLAMAV_PORT: 3310
+      CLOUDMERSIVE_API_KEY: ${CLOUDMERSIVE_API_KEY:-}
       ELASTICSEARCH_URL: http://elasticsearch:9200
       JWT_SECRET: ${JWT_SECRET}
       KMS_MASTER_KEY: ${KMS_MASTER_KEY}
     expose:
       - "8080"
+    volumes:
+      - backend_vault:/app/storage_vault
+      - pki_data:/app/storage_vault/pki
     networks:
       - sih190_internal
       - sih190_public
@@ -143,3 +131,5 @@ volumes:
   redis_data:
   minio_data:
   es_data:
+  backend_vault:
+  pki_data:

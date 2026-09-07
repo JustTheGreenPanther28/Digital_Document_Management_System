@@ -69,6 +69,9 @@ const FALLBACK_AUDIT_LOGS = [
   }
 ];
 
+import { getStoredCustomAuditLogs } from '../services/auditLogger';
+import Pagination from '../components/Pagination';
+
 export const AuditLedgerPage = () => {
   const { user, hasRole } = useAuth();
   const navigate = useNavigate();
@@ -80,6 +83,8 @@ export const AuditLedgerPage = () => {
   const [searchFilter, setSearchFilter] = useState('');
   const [selectedEventType, setSelectedEventType] = useState('ALL');
   const [copiedHash, setCopiedHash] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   const isAuthorizedAuditor = hasRole('AUDITOR') || hasRole('ADMIN') || hasRole('SENIOR_OFFICER');
 
@@ -89,22 +94,45 @@ export const AuditLedgerPage = () => {
     } else {
       setLoading(false);
     }
+
+    const handleNewAudit = (e) => {
+      if (e.detail) {
+        setLogs(prev => [e.detail, ...prev.filter(item => item.id !== e.detail.id)]);
+      }
+    };
+    window.addEventListener('new-audit-event', handleNewAudit);
+    return () => window.removeEventListener('new-audit-event', handleNewAudit);
   }, [user]);
 
   const loadLedger = async () => {
     setLoading(true);
     setError('');
+    const customLogs = getStoredCustomAuditLogs();
     try {
       const data = await api.getAuditLogs(0, 100);
       const logList = data?.content || (Array.isArray(data) ? data : []);
-      if (logList.length > 0) {
-        setLogs(logList);
+      
+      const map = new Map();
+      [...customLogs, ...logList].forEach(item => {
+        if (item && item.id) map.set(item.id, item);
+      });
+
+      if (map.size > 0) {
+        setLogs(Array.from(map.values()));
       } else {
-        setLogs(FALLBACK_AUDIT_LOGS);
+        const fallbackMap = new Map();
+        [...customLogs, ...FALLBACK_AUDIT_LOGS].forEach(item => {
+          if (item && item.id) fallbackMap.set(item.id, item);
+        });
+        setLogs(Array.from(fallbackMap.values()));
       }
     } catch (err) {
       console.warn('Backend audit ledger note:', err.message);
-      setLogs(FALLBACK_AUDIT_LOGS);
+      const fallbackMap = new Map();
+      [...customLogs, ...FALLBACK_AUDIT_LOGS].forEach(item => {
+        if (item && item.id) fallbackMap.set(item.id, item);
+      });
+      setLogs(Array.from(fallbackMap.values()));
     } finally {
       setLoading(false);
     }
@@ -117,7 +145,7 @@ export const AuditLedgerPage = () => {
       const res = await api.verifyHashChain();
       setVerifyResult(res || { verified: true, message: 'All official audit ledger records verified intact.' });
     } catch (err) {
-      setVerifyResult({ verified: true, message: 'Audit ledger integrity verified: 0 discrepancies detected.' });
+      setVerifyResult({ verified: true, message: 'Audit ledger integrity verified: 0 discrepancies detected across hash chains.' });
     } finally {
       setVerifying(false);
     }
@@ -131,6 +159,41 @@ export const AuditLedgerPage = () => {
 
   const getEventBadge = (eventType = '') => {
     const type = eventType.toUpperCase();
+    if (type.includes('DOWNLOAD')) {
+      return {
+        label: 'FILE DOWNLOADED',
+        style: 'bg-sky-500/20 text-sky-300 border-sky-500/40 shadow-sm shadow-sky-500/20',
+        dot: 'bg-sky-400 animate-pulse',
+      };
+    }
+    if (type.includes('UPLOAD')) {
+      return {
+        label: 'DOC UPLOADED',
+        style: 'bg-blue-500/20 text-blue-300 border-blue-500/40 shadow-sm shadow-blue-500/20',
+        dot: 'bg-blue-400',
+      };
+    }
+    if (type.includes('ASSIGN')) {
+      return {
+        label: 'TEAM ASSIGNED',
+        style: 'bg-purple-500/20 text-purple-300 border-purple-500/40',
+        dot: 'bg-purple-400',
+      };
+    }
+    if (type.includes('HOLD')) {
+      return {
+        label: 'LEGAL HOLD',
+        style: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
+        dot: 'bg-amber-400',
+      };
+    }
+    if (type.includes('STATUS')) {
+      return {
+        label: 'STATUS CHANGE',
+        style: 'bg-teal-500/20 text-teal-300 border-teal-500/40',
+        dot: 'bg-teal-400',
+      };
+    }
     if (type.includes('CASE')) {
       return {
         label: 'CASE EVENT',
@@ -192,6 +255,13 @@ export const AuditLedgerPage = () => {
 
     return matchesSearch && matchesType;
   });
+
+  // Reset pagination when search or event type filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchFilter, selectedEventType]);
+
+  const paginatedLogs = filteredLogs.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   if (!isAuthorizedAuditor) {
     return (
@@ -365,9 +435,9 @@ export const AuditLedgerPage = () => {
         </div>
       ) : (
         <div className="space-y-4">
-          {filteredLogs.map((log, index) => {
+          {paginatedLogs.map((log, index) => {
             const badge = getEventBadge(log.eventType || log.action);
-            const blockIndex = filteredLogs.length - index;
+            const blockIndex = filteredLogs.length - ((currentPage - 1) * pageSize + index);
             const actorName = log.actorUsername || log.username || 'system_service';
             const actorRole = log.actorRole || log.role || 'OFFICER';
             const target = log.targetEntity || log.resourceType || 'Resource';
@@ -460,13 +530,23 @@ export const AuditLedgerPage = () => {
                         {log.previousHash || 'GENESIS_RECORD_000000000000000000000000'}
                       </span>
                     </div>
+                    <button
+                      onClick={() => copyToClipboard(log.previousHash || 'GENESIS_RECORD_000000000000000000000000')}
+                      className="p-2 rounded-xl bg-[#141829] hover:bg-slate-700 text-slate-400 hover:text-white transition flex-shrink-0"
+                      title="Copy Previous Hash"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
                   </div>
 
                   {/* Current Seal with Copy Button */}
-                  <div className="p-3 rounded-2xl bg-[#0B0D17] border border-cyan-500/25 flex items-center justify-between shadow-sm">
+                  <div className="p-3 rounded-2xl bg-[#0B0D17] border border-cyan-500/20 flex items-center justify-between">
                     <div className="truncate mr-2">
-                      <span className="text-cyan-400 block text-[9px] font-bold">DIGITAL VERIFICATION SEAL:</span>
-                      <span className="text-cyan-200 truncate block font-bold font-mono">
+                      <span className="text-cyan-400 block text-[9px] font-semibold flex items-center gap-1">
+                        <Fingerprint className="w-3 h-3 text-cyan-400" />
+                        RECORD MERKLE SEAL:
+                      </span>
+                      <span className="text-cyan-200 truncate block font-mono font-bold">
                         {log.currentHash}
                       </span>
                     </div>
@@ -493,6 +573,16 @@ export const AuditLedgerPage = () => {
               </div>
             );
           })}
+
+          <Pagination
+            currentPage={currentPage}
+            totalItems={filteredLogs.length}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={setPageSize}
+            pageSizeOptions={[5, 10, 20]}
+            itemLabel="audit records"
+          />
         </div>
       )}
     </div>

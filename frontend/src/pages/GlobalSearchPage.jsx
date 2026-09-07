@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { canClearanceAccess, checkCaseAccess, isEvidenceSubmittedByUser } from '../services/abac';
 import { 
   Search, 
   Briefcase, 
@@ -55,6 +56,19 @@ const FALLBACK_CASES = [
     status: 'REGISTERED',
     registrationDate: '2026-08-20T09:00:00Z',
     leadOfficer: 'Dr. Evelyn Reed'
+  },
+  {
+    id: '4',
+    caseNumber: 'CASE-2026-004',
+    title: 'State vs Metro Automated Transit & Toll Registry Dispute',
+    description: 'Public judicial inquiry into transit ticketing anomaly and automated municipal toll violation hearings.',
+    firNumber: 'FIR-2026-0105',
+    investigatingAgency: 'Metropolitan Public Traffic & Court Division',
+    priority: 'LOW',
+    classification: 'PUBLIC',
+    status: 'HEARING_SCHEDULED',
+    registrationDate: '2026-08-22T08:00:00Z',
+    leadOfficer: 'Registrar Arthur Pendelton'
   }
 ];
 
@@ -91,6 +105,17 @@ const FALLBACK_EVIDENCE = [
     status: 'IN_CUSTODY',
     currentCustodian: 'Officer Michael Vance',
     classification: 'SECRET'
+  },
+  {
+    id: 'evd-4',
+    barcode: 'EVD-2026-004-A',
+    caseNumber: 'CASE-2026-004',
+    itemCategory: 'DOCUMENTARY',
+    description: 'Public municipal transit ticket logs and automated toll registry printouts.',
+    storageLocation: 'Public Registry Vault - Shelf 1',
+    status: 'IN_CUSTODY',
+    currentCustodian: 'Registrar Arthur Pendelton',
+    classification: 'PUBLIC'
   }
 ];
 
@@ -114,6 +139,16 @@ const FALLBACK_DOCS = [
     originalFilename: 'fir_0981_signed.pdf',
     sha256Hash: '7c3ae941bca94812739481274918237491823749182374918237491823749182',
     uploadedAt: '2026-08-16T10:15:00Z'
+  },
+  {
+    id: 'doc-3',
+    title: 'Public Judicial Gazette & Seizure Proclamation',
+    caseNumber: 'CASE-2026-004',
+    documentType: 'POLICE_REPORT',
+    classification: 'PUBLIC',
+    originalFilename: 'public_judicial_proclamation.pdf',
+    sha256Hash: '5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8',
+    uploadedAt: '2026-08-22T09:30:00Z'
   }
 ];
 
@@ -224,9 +259,18 @@ export const GlobalSearchPage = () => {
   const results = useMemo(() => {
     const qLower = (query || '').toLowerCase().trim();
 
-    // Matching Cases
+    // Map case numbers to classifications for cross-entity MAC clearance enforcement
+    const caseClassificationMap = {};
+    (allDataset.cases || []).forEach(c => {
+      if (c.caseNumber) caseClassificationMap[c.caseNumber] = c.classification;
+      if (c.id) caseClassificationMap[String(c.id)] = c.classification;
+    });
+
+    // Matching Cases (Person-Based ABAC: user must have clearance AND assignment/creator/admin access)
     const cases = (allDataset.cases || []).filter(c => {
       if (!c) return false;
+      const access = checkCaseAccess(user, c);
+      if (!access.allowed) return false;
       if (!qLower) return true;
       return (
         (c.title || '').toLowerCase().includes(qLower) ||
@@ -240,9 +284,12 @@ export const GlobalSearchPage = () => {
       );
     });
 
-    // Matching Evidence
+    // Matching Evidence (Person-Based ABAC: clearance + submitted/held by user unless admin)
     const evidence = (allDataset.evidence || []).filter(e => {
       if (!e) return false;
+      const itemClassification = e.classification || caseClassificationMap[e.caseNumber] || caseClassificationMap[String(e.caseId)] || 'RESTRICTED';
+      if (!canClearanceAccess(user?.clearance, itemClassification)) return false;
+      if (!isEvidenceSubmittedByUser(e, user)) return false;
       if (!qLower) return true;
       return (
         (e.barcode || '').toLowerCase().includes(qLower) ||
@@ -255,9 +302,11 @@ export const GlobalSearchPage = () => {
       );
     });
 
-    // Matching Documents
+    // Matching Documents (Mandatory Access Control: hide documents exceeding user clearance)
     const documents = (allDataset.documents || []).filter(d => {
       if (!d) return false;
+      const docClassification = d.classification || caseClassificationMap[d.caseNumber] || caseClassificationMap[String(d.caseId)] || 'RESTRICTED';
+      if (!canClearanceAccess(user?.clearance, docClassification)) return false;
       if (!qLower) return true;
       return (
         (d.title || '').toLowerCase().includes(qLower) ||
@@ -268,9 +317,11 @@ export const GlobalSearchPage = () => {
       );
     });
 
-    // Matching Custody Transfers
+    // Matching Custody Transfers (Mandatory Access Control: hide transfers for cases exceeding user clearance)
     const transfers = (allDataset.transfers || []).filter(t => {
       if (!t) return false;
+      const transferClassification = caseClassificationMap[t.caseNumber] || 'RESTRICTED';
+      if (!canClearanceAccess(user?.clearance, transferClassification)) return false;
       if (!qLower) return true;
       return (
         (t.transferId || '').toLowerCase().includes(qLower) ||
@@ -290,7 +341,7 @@ export const GlobalSearchPage = () => {
       transfers,
       totalMatches: cases.length + evidence.length + documents.length + transfers.length
     };
-  }, [allDataset, query]);
+  }, [allDataset, query, user?.clearance]);
 
   const handleInputChange = (e) => {
     const val = e.target.value;

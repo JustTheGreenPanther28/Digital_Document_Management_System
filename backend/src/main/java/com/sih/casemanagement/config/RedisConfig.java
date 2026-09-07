@@ -34,7 +34,35 @@ public class RedisConfig {
 
     @Bean
     public RedisConnectionFactory redisConnectionFactory() {
-        RedisStandaloneConfiguration config = new RedisStandaloneConfiguration(redisHost, redisPort);
+        String cleanHost = (redisHost != null) ? redisHost.trim() : "localhost";
+        int cleanPort = redisPort;
+
+        // Clean any protocol prefixes like https://, rediss://, redis://
+        if (cleanHost.startsWith("https://")) {
+            cleanHost = cleanHost.substring("https://".length());
+        } else if (cleanHost.startsWith("http://")) {
+            cleanHost = cleanHost.substring("http://".length());
+        } else if (cleanHost.startsWith("rediss://")) {
+            cleanHost = cleanHost.substring("rediss://".length());
+        } else if (cleanHost.startsWith("redis://")) {
+            cleanHost = cleanHost.substring("redis://".length());
+        }
+
+        // Clean trailing slashes or paths
+        if (cleanHost.contains("/")) {
+            cleanHost = cleanHost.substring(0, cleanHost.indexOf('/'));
+        }
+
+        // Clean port if embedded in hostname e.g. host:6379
+        if (cleanHost.contains(":")) {
+            String[] parts = cleanHost.split(":");
+            cleanHost = parts[0];
+            try {
+                cleanPort = Integer.parseInt(parts[1]);
+            } catch (NumberFormatException ignored) {}
+        }
+
+        RedisStandaloneConfiguration config = new RedisStandaloneConfiguration(cleanHost, cleanPort);
         if (redisUsername != null && !redisUsername.isBlank()) {
             config.setUsername(redisUsername);
         }

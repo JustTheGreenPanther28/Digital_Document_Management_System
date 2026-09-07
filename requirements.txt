@@ -1,0 +1,90 @@
+﻿# ==============================================================================
+# SIH-190 NATIONAL DIGITAL CASE & EVIDENCE MANAGEMENT SYSTEM (NDCMS)
+# PROJECT REQUIREMENTS & DEPENDENCY SPECIFICATION
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. SYSTEM RUNTIME PREREQUISITES
+# ------------------------------------------------------------------------------
+# Operating System: Windows 10/11, macOS Sonoma/Sequoia, or Ubuntu Linux 22.04+
+# OpenJDK / Java LTS: Java 21 LTS (or Java 25)
+# Node.js: v18.x or v20.x+ (Recommended: v20.18+)
+# Package Manager: npm v9.x+ or yarn v1.22+
+# Database: PostgreSQL 15+ / Supabase Cloud PostgreSQL
+# Container Runtime (Optional): Docker Engine 24+ & Docker Compose v2.20+
+# Build Tool: Apache Maven 3.9+ (Wrapper included: .\mvnw.cmd / ./mvnw)
+
+# ------------------------------------------------------------------------------
+# 2. BACKEND JAVA / SPRING BOOT ECOSYSTEM (pom.xml)
+# ------------------------------------------------------------------------------
+# Framework: Spring Boot 3.4.3
+# JDK Target: Java 21 (LTS)
+#
+# Core Spring Starters:
+# - org.springframework.boot:spring-boot-starter-web:3.4.3
+# - org.springframework.boot:spring-boot-starter-security:3.4.3
+# - org.springframework.boot:spring-boot-starter-data-jpa:3.4.3
+# - org.springframework.boot:spring-boot-starter-validation:3.4.3
+# - org.springframework.boot:spring-boot-starter-actuator:3.4.3
+# - org.springframework.boot:spring-boot-starter-data-redis:3.4.3
+# - org.springframework.boot:spring-boot-starter-mail:3.4.3
+#
+# Cryptography, Tokens & Security:
+# - io.jsonwebtoken:jjwt-api:0.12.6
+# - io.jsonwebtoken:jjwt-impl:0.12.6
+# - io.jsonwebtoken:jjwt-jackson:0.12.6
+# - org.bouncycastle:bcprov-jdk18on:1.78.1
+# - com.warrenstrange:googleauth:1.5.0
+#
+# Object Storage & File Processing:
+# - software.amazon.awssdk:s3:2.29.51 (MinIO / S3 Object Storage)
+# - org.apache.tika:tika-core:2.9.2 (Magic-Byte Inspection & File Forensics)
+#
+# Database & Flyway Migrations:
+# - org.postgresql:postgresql:42.7.5
+# - org.flywaydb:flyway-core:10.20.0
+# - org.flywaydb:flyway-database-postgresql:10.20.0
+# - com.h2database:h2:2.3.232 (Embedded Dev/Test Mode)
+#
+# API Documentation:
+# - org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.5
+
+# ------------------------------------------------------------------------------
+# 3. FRONTEND CLIENT JAVASCRIPT / REACT ECOSYSTEM (package.json)
+# ------------------------------------------------------------------------------
+# Framework: React 18.3.1
+# Build System: Vite 6.0.1
+# Styling: TailwindCSS 3.4.16 + PostCSS 8.4.49 + Autoprefixer 10.4.20
+#
+# Dependencies:
+# - react: ^18.3.1
+# - react-dom: ^18.3.1
+# - react-router-dom: ^6.28.0
+# - lucide-react: ^0.468.0 (Security & Dashboard Iconography)
+#
+# DevDependencies:
+# - vite: ^6.0.1
+# - @vitejs/plugin-react: ^4.3.4
+# - tailwindcss: ^3.4.16
+# - postcss: ^8.4.49
+# - autoprefixer: ^10.4.20
+# - @types/react: ^18.3.12
+# - @types/react-dom: ^18.3.1
+
+# ------------------------------------------------------------------------------
+# 4. OPTIONAL PYTHON TEST & BENCHMARK SUITE (Python 3.10+)
+# ------------------------------------------------------------------------------
+requests>=2.31.0
+cryptography>=42.0.0
+pytest>=8.0.0
+python-dotenv>=1.0.0
+pydantic>=2.5.0
+
+# ------------------------------------------------------------------------------
+# 5. DEFAULT PORTS & SERVICES MAP
+# ------------------------------------------------------------------------------
+# Frontend Application:  http://localhost:3000
+# Backend REST API:       http://localhost:8080/api/v1
+# Swagger / OpenAPI Docs: http://localhost:8080/swagger-ui.html
+# Actuator Health Check:  http://localhost:8080/actuator/health
+# Supabase PostgreSQL:    aws-0-ap-south-1.pooler.supabase.com:6543 (sih190_db)

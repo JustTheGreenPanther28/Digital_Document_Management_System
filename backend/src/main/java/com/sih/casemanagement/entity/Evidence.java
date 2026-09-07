@@ -2,12 +2,14 @@ package com.sih.casemanagement.entity;
 
 import com.sih.casemanagement.common.enums.EvidenceStatus;
 import com.sih.casemanagement.common.enums.EvidenceType;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import java.time.Instant;
 import java.util.UUID;
 
 @Entity
 @Table(name = "evidence")
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class Evidence {
 
     @Id
@@ -31,8 +33,9 @@ public class Evidence {
     @Column(name = "evidence_type", nullable = false, length = 50)
     private EvidenceType evidenceType;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "collected_by")
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "passwordHash", "mfaSecret", "roles"})
     private User collectedBy;
 
     @Column(name = "collected_at", nullable = false)
@@ -54,8 +57,9 @@ public class Evidence {
     @Column(nullable = false, length = 50)
     private EvidenceStatus status = EvidenceStatus.REGISTERED;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "current_custodian_id")
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "passwordHash", "mfaSecret", "roles"})
     private User currentCustodian;
 
     @ManyToOne(fetch = FetchType.LAZY)

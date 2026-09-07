@@ -66,7 +66,7 @@ public class DigitalSignatureService {
         DigitalSignatureRepository signatureRepository,
         DocumentRepository documentRepository,
         @Value("${app.pki.keystore-path:./storage_vault/pki/sih190-pki.p12}") String keystorePathStr,
-        @Value("${app.pki.keystore-password:Sih190PkiPassword!2026}") String keystorePassword
+        @Value("${app.pki.keystore-password}") String keystorePassword
     ) {
         this.signatureRepository = signatureRepository;
         this.documentRepository = documentRepository;

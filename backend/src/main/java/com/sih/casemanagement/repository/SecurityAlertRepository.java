@@ -11,5 +11,6 @@ import java.util.UUID;
 public interface SecurityAlertRepository extends JpaRepository<SecurityAlert, UUID> {
     List<SecurityAlert> findByResolvedFalseOrderByCreatedAtDesc();
     List<SecurityAlert> findAllByOrderByCreatedAtDesc();
+    List<SecurityAlert> findByAlertTypeInOrderByCreatedAtDesc(List<String> alertTypes);
     long countByResolvedFalse();
 }

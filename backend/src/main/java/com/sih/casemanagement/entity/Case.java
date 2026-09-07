@@ -3,12 +3,14 @@ package com.sih.casemanagement.entity;
 import com.sih.casemanagement.common.enums.CasePriority;
 import com.sih.casemanagement.common.enums.CaseStatus;
 import com.sih.casemanagement.common.enums.DocumentClassification;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import java.time.Instant;
 import java.util.UUID;
 
 @Entity
 @Table(name = "cases")
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class Case {
 
     @Id
@@ -48,7 +50,9 @@ public class Case {
     @Column(nullable = false, length = 20)
     private DocumentClassification classification = DocumentClassification.CONFIDENTIAL;
 
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "created_by")
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "passwordHash", "mfaSecret", "roles"})
     private User createdBy;
 
     @Column(name = "is_legal_hold", nullable = false)
@@ -57,18 +61,23 @@ public class Case {
     @Column(name = "legal_hold_reason", columnDefinition = "TEXT")
     private String legalHoldReason;
 
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "legal_hold_by")
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "passwordHash", "mfaSecret", "roles"})
     private User legalHoldBy;
 
     @Column(name = "closed_at")
     private Instant closedAt;
 
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "closed_by")
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "passwordHash", "mfaSecret", "roles"})
     private User closedBy;
 
     @Column(name = "archived_at")
     private Instant archivedAt;
 
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "archived_by")
     private User archivedBy;
 

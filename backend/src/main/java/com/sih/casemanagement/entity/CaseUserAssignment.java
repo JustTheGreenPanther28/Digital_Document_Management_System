@@ -1,11 +1,13 @@
 package com.sih.casemanagement.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import java.time.Instant;
 import java.util.UUID;
 
 @Entity
 @Table(name = "case_user_assignments")
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class CaseUserAssignment {
 
     @Id

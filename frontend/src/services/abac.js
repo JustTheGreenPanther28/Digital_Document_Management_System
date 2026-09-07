@@ -42,8 +42,6 @@ export const checkCaseAccess = (user, caseData, runtimeAssignments = []) => {
 
   const roles = user.roles || [];
   const isAdmin = roles.some((r) => r === 'ADMIN' || r === 'ROLE_ADMIN');
-  const isSeniorOfficer = roles.some((r) => r === 'SENIOR_OFFICER' || r === 'ROLE_SENIOR_OFFICER');
-  const isAuditor = roles.some((r) => r === 'AUDITOR' || r === 'ROLE_AUDITOR');
 
   const caseClassification = caseData?.classification || 'RESTRICTED';
 
@@ -58,34 +56,34 @@ export const checkCaseAccess = (user, caseData, runtimeAssignments = []) => {
     };
   }
 
-  // 2. Command Authority & Compliance Roles have supervisory access
+  // 2. Root System Administrator (ADMIN) maintains emergency supervisory audit access
   if (isAdmin) {
     return { allowed: true, role: 'ADMIN', badge: 'SUPERVISORY ADMIN' };
   }
-  if (isSeniorOfficer) {
-    return { allowed: true, role: 'SENIOR_OFFICER', badge: 'COMMAND OVERVIEW' };
-  }
-  if (isAuditor) {
-    return { allowed: true, role: 'AUDITOR', badge: 'AUDIT INSPECTOR', readOnly: true };
-  }
+
+  const curUsername = (user.username || '').toLowerCase().trim();
+  const curUserId = String(user.id || user.userId || '').toLowerCase().trim();
+  const curFullName = (user.fullName || '').toLowerCase().trim();
 
   // 3. Creator of the Case Dossier
+  const creatorUsername = (caseData?.createdByUsername || caseData?.createdBy?.username || '').toLowerCase().trim();
+  const creatorId = String(caseData?.createdById || caseData?.createdBy?.id || '').toLowerCase().trim();
+
   if (
-    caseData?.createdByUsername &&
-    user.username &&
-    caseData.createdByUsername.toLowerCase() === user.username.toLowerCase()
+    (creatorUsername && creatorUsername === curUsername) ||
+    (creatorId && creatorId === curUserId)
   ) {
     return { allowed: true, role: 'CASE_CREATOR', badge: 'PRIMARY CREATOR' };
   }
 
-  // 4. Case Team Assignment Check
+  // 4. Strict Person-Level Assignment Check
   const storedAssignments = getStoredTeamAssignments();
   const caseIdStr = String(caseData?.id || '');
   const caseNumStr = String(caseData?.caseNumber || '');
 
   const allAssignments = [
-    ...(caseData?.teamAssignments || []),
     ...(caseData?.assignments || []),
+    ...(caseData?.teamAssignments || []),
     ...(runtimeAssignments || []),
     ...storedAssignments.filter(
       (a) =>
@@ -96,15 +94,11 @@ export const checkCaseAccess = (user, caseData, runtimeAssignments = []) => {
   ];
 
   const matchedAssignment = allAssignments.find((asgn) => {
-    const asgnUsername = (asgn.username || asgn.userId || '').toLowerCase();
-    const asgnFullName = (asgn.fullName || '').toLowerCase();
-    const curUsername = (user.username || '').toLowerCase();
-    const curUserId = (user.id || user.userId || '').toLowerCase();
-    const curFullName = (user.fullName || '').toLowerCase();
+    const asgnUsername = (asgn.username || asgn.userId || '').toLowerCase().trim();
+    const asgnFullName = (asgn.fullName || '').toLowerCase().trim();
 
     return (
-      (asgnUsername && asgnUsername === curUsername) ||
-      (asgnUsername && asgnUsername === curUserId) ||
+      (asgnUsername && (asgnUsername === curUsername || asgnUsername === curUserId)) ||
       (asgnFullName && curFullName && asgnFullName === curFullName)
     );
   });
@@ -117,12 +111,82 @@ export const checkCaseAccess = (user, caseData, runtimeAssignments = []) => {
     };
   }
 
-  // 5. Unassigned Officer -> Strict ABAC Restriction
+  // 5. Unassigned Officer -> Strictly BLOCKED by Person-Level ABAC
   return {
     allowed: false,
     reason: 'NOT_ASSIGNED',
-    details: `ABAC Access Policy Violation: Officer @${user.username} (${user.fullName || 'Officer'}) is not an assigned member of this investigation team. Access to Case ${caseData?.caseNumber || 'Dossier'} is restricted to authorized team personnel only.`,
+    details: `Access Denied (Person-Based ABAC): Officer @${user.username} (${user.fullName || 'Officer'}) is not an assigned team member on this case. Access to Case ${caseData?.caseNumber || caseData?.title || 'Dossier'} is strictly restricted to assigned personnel.`,
     userClearance: user.clearance,
     caseNumber: caseData?.caseNumber,
   };
 };
+
+/**
+ * Strict Person-Level Access Check for Evidence Artifacts:
+ * A user can only access/view evidence that they personally submitted / collected / registered,
+ * or where they are the designated custodian.
+ * System Administrator (ADMIN) retains global audit oversight.
+ */
+export const isEvidenceSubmittedByUser = (item, user) => {
+  if (!item || !user) return false;
+
+  const roles = user.roles || (user.role ? [user.role] : []);
+  const isAdmin = roles.some(
+    (r) => r === 'ADMIN' || r === 'ROLE_ADMIN' || user.username === 'admin'
+  );
+  if (isAdmin) {
+    return true;
+  }
+
+  const curUsername = (user.username || '').toLowerCase().trim();
+  const curUserId = String(user.id || user.userId || '').toLowerCase().trim();
+  const curFullName = (user.fullName || '').toLowerCase().trim();
+
+  // 1. Submitted By
+  const subUser = (item.submittedByUsername || item.submittedBy || '').toLowerCase().trim();
+  const subId = String(item.submittedById || '').toLowerCase().trim();
+  const subName = (item.submittedByName || '').toLowerCase().trim();
+
+  if (subUser && (subUser === curUsername || subUser === curUserId)) return true;
+  if (subId && (subId === curUserId || subId === curUsername)) return true;
+  if (curFullName && subName && (subName === curFullName || subName.includes(curFullName) || curFullName.includes(subName))) return true;
+
+  // 2. Collected By (can be object or string)
+  let colUser = '';
+  let colId = '';
+  let colName = '';
+  if (typeof item.collectedBy === 'object' && item.collectedBy !== null) {
+    colUser = (item.collectedBy.username || item.collectedBy.userId || '').toLowerCase().trim();
+    colId = String(item.collectedBy.id || '').toLowerCase().trim();
+    colName = (item.collectedBy.fullName || '').toLowerCase().trim();
+  } else if (typeof item.collectedBy === 'string') {
+    colUser = item.collectedBy.toLowerCase().trim();
+  }
+  const colByUsername = (item.collectedByUsername || '').toLowerCase().trim();
+  const colById = String(item.collectedById || '').toLowerCase().trim();
+
+  if (colUser && (colUser === curUsername || colUser === curUserId)) return true;
+  if (colByUsername && (colByUsername === curUsername || colByUsername === curUserId)) return true;
+  if (colId && (colId === curUserId || colId === curUsername)) return true;
+  if (colById && (colById === curUserId || colById === curUsername)) return true;
+  if (curFullName && colName && (colName === curFullName || colName.includes(curFullName) || curFullName.includes(colName))) return true;
+
+  // 3. Current Custodian
+  const custName = (item.currentCustodian || item.custodian || '').toLowerCase().trim();
+  const custUser = (item.currentCustodianUsername || item.custodianUsername || '').toLowerCase().trim();
+  const custId = String(item.currentCustodianId || item.custodianId || '').toLowerCase().trim();
+
+  if (custUser && (custUser === curUsername || custUser === curUserId)) return true;
+  if (custId && (custId === curUserId || custId === curUsername)) return true;
+  if (curFullName && custName && (custName === curFullName || custName.includes(curFullName) || custName.includes(custName))) return true;
+  if (curUsername && custName && (custName === curUsername || custName.includes(curUsername))) return true;
+
+  // 4. Registered By / Created By
+  const regUser = (item.registeredBy || item.registeredByUsername || item.createdBy || item.createdByUsername || '').toLowerCase().trim();
+  const regId = String(item.registeredById || item.createdById || '').toLowerCase().trim();
+  if (regUser && (regUser === curUsername || regUser === curUserId)) return true;
+  if (regId && (regId === curUserId || regId === curUsername)) return true;
+
+  return false;
+};
+

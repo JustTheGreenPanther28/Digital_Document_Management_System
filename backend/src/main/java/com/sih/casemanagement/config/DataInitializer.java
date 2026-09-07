@@ -3,7 +3,7 @@ package com.sih.casemanagement.config;
 import com.sih.casemanagement.common.enums.*;
 import com.sih.casemanagement.entity.*;
 import com.sih.casemanagement.repository.*;
-import com.sih.casemanagement.security.TotpService;
+
 import com.sih.casemanagement.service.AuditService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,7 +31,7 @@ public class DataInitializer implements CommandLineRunner {
     private final PasswordEncoder passwordEncoder;
     private final AuditService auditService;
 
-    private final TotpService totpService;
+
 
     @org.springframework.beans.factory.annotation.Value("${app.admin.username:ADMIN}")
     private String adminUsername;
@@ -51,8 +51,7 @@ public class DataInitializer implements CommandLineRunner {
     @org.springframework.beans.factory.annotation.Value("${app.admin.department:National Cyber Defense HQ}")
     private String adminDepartment;
     
-    @org.springframework.beans.factory.annotation.Value("${app.totp.secret}")
-    private String totpSecret;
+
 
     public DataInitializer(
         UserRepository userRepository,
@@ -62,8 +61,7 @@ public class DataInitializer implements CommandLineRunner {
         CaseUserAssignmentRepository assignmentRepository,
         CaseStatusHistoryRepository statusHistoryRepository,
         PasswordEncoder passwordEncoder,
-        AuditService auditService,
-        TotpService totpService
+        AuditService auditService
     ) {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
@@ -73,7 +71,7 @@ public class DataInitializer implements CommandLineRunner {
         this.statusHistoryRepository = statusHistoryRepository;
         this.passwordEncoder = passwordEncoder;
         this.auditService = auditService;
-        this.totpService = totpService;
+
     }
 
     @Override
@@ -81,28 +79,8 @@ public class DataInitializer implements CommandLineRunner {
     public void run(String... args) {
         ensurePermissions();
         ensureRoles();
-        purgeLegacyUsers();
         ensureUsers();
         ensureDemoCase();
-    }
-
-    private void purgeLegacyUsers() {
-        String[] legacyUsernames = {
-            "senior_officer", "investigator_a", "investigator_b", "custodian",
-            "forensic_officer", "prosecutor", "court_officer", "auditor", "admin"
-        };
-        for (String uname : legacyUsernames) {
-            if (!uname.equalsIgnoreCase(adminUsername)) {
-                userRepository.findByUsername(uname).ifPresent(user -> {
-                    try {
-                        userRepository.delete(user);
-                        log.info("Purged legacy demo account: {}", uname);
-                    } catch (Exception e) {
-                        log.debug("Note during purge: {}", e.getMessage());
-                    }
-                });
-            }
-        }
     }
 
     private void ensurePermissions() {
@@ -196,9 +174,9 @@ public class DataInitializer implements CommandLineRunner {
 
     private void ensureUsers() {
         String effectiveAdminUser = (adminUsername != null && !adminUsername.isBlank()) ? adminUsername.trim() : "ADMIN";
-        String encodedPassword = passwordEncoder.encode(adminInitialPassword != null ? adminInitialPassword : "Admin@2026!Secure");
+        String encodedPassword = passwordEncoder.encode(adminInitialPassword != null ? adminInitialPassword : "Admin@2026");
 
-        if (userRepository.findByUsername(effectiveAdminUser).isEmpty()) {
+        if (userRepository.findByUsernameIgnoreCase(effectiveAdminUser).isEmpty()) {
             User user = new User();
             user.setUsername(effectiveAdminUser);
             user.setEmail(adminEmail != null ? adminEmail : "admin@ndcms.gov.in");
@@ -208,14 +186,66 @@ public class DataInitializer implements CommandLineRunner {
             user.setDepartment(adminDepartment != null ? adminDepartment : "National Cyber Defense HQ");
             user.setSecurityClearance(SecurityClearance.TOP_SECRET);
             user.setEnabled(true);
-            user.setAccountLocked(false);
-            user.setMfaEnabled(true);
-            user.setMfaSecret(this.totpSecret);
+            user.setMfaEnabled(false);
+            user.setMfaSecret(null);
 
             roleRepository.findByName(RoleType.ADMIN).ifPresent(r -> user.setRoles(Set.of(r)));
             userRepository.save(user);
-            log.info("Initialized secure Central Administrator user: {} ({}) with MFA mandatory", effectiveAdminUser, RoleType.ADMIN);
+            log.info("Initialized secure Central Administrator user: {} ({})", effectiveAdminUser, RoleType.ADMIN);
         }
+
+        // Seed default officers if not present
+        Object[][] officers = {
+            {"senior_officer", "senior@ndcms.gov.in", "Commissioner Sterling", "IPS-8921", "Crime Branch HQ", SecurityClearance.TOP_SECRET, RoleType.SENIOR_OFFICER},
+            {"investigator_a", "investigator_a@ndcms.gov.in", "Det. John Miller (Lead)", "INS-4412", "Cyber Crime Cell", SecurityClearance.SECRET, RoleType.INVESTIGATOR},
+            {"investigator_b", "investigator_b@ndcms.gov.in", "Det. Sarah Connor", "INS-4413", "Special Cell", SecurityClearance.CONFIDENTIAL, RoleType.INVESTIGATOR},
+            {"custodian", "custodian@ndcms.gov.in", "Officer Michael Vance", "CUST-009", "Central Malkhana / Evidence Vault", SecurityClearance.CONFIDENTIAL, RoleType.EVIDENCE_CUSTODIAN},
+            {"forensic_officer", "forensic@ndcms.gov.in", "Dr. Evelyn Reed", "CFSL-901", "Central Forensic Science Laboratory (CFSL)", SecurityClearance.SECRET, RoleType.FORENSIC_OFFICER},
+            {"prosecutor", "prosecutor@ndcms.gov.in", "Counsel Diane Lockhart", "PROS-112", "Directorate of Prosecution", SecurityClearance.SECRET, RoleType.PROSECUTOR},
+            {"court_officer", "court@ndcms.gov.in", "Registrar Arthur Pendelton", "CRT-004", "Principal Sessions Court Registry", SecurityClearance.PUBLIC, RoleType.COURT_OFFICER},
+            {"auditor", "auditor@ndcms.gov.in", "Inspector General Hayes", "AUD-991", "Vigilance & Digital Compliance Directorate", SecurityClearance.TOP_SECRET, RoleType.AUDITOR}
+        };
+
+        String defaultPass = passwordEncoder.encode("Password@2026!");
+        for (Object[] off : officers) {
+            String uName = (String) off[0];
+            if (userRepository.findByUsernameIgnoreCase(uName).isEmpty()) {
+                User u = new User();
+                u.setUsername(uName);
+                u.setEmail((String) off[1]);
+                u.setPasswordHash(defaultPass);
+                u.setFullName((String) off[2]);
+                u.setBadgeNumber((String) off[3]);
+                u.setDepartment((String) off[4]);
+                u.setSecurityClearance((SecurityClearance) off[5]);
+                u.setEnabled(true);
+                u.setAccountLocked(false);
+                u.setMfaEnabled(false);
+                roleRepository.findByName((RoleType) off[6]).ifPresent(r -> u.setRoles(Set.of(r)));
+                userRepository.save(u);
+                log.info("Seeded directory officer account: {}", uName);
+            }
+        }
+
+        // Guarantee all user accounts are unlocked, active, and have reset attempts on startup
+        userRepository.findAll().forEach(u -> {
+            boolean modified = false;
+            if (u.isAccountLocked() || u.getFailedLoginAttempts() > 0 || u.getLockTime() != null) {
+                u.setAccountLocked(false);
+                u.setFailedLoginAttempts(0);
+                u.setLockTime(null);
+                modified = true;
+            }
+
+            if (!u.isEnabled()) {
+                u.setEnabled(true);
+                modified = true;
+            }
+            if (modified) {
+                userRepository.save(u);
+                log.info("Unlocked account and cleared lockout state for user: {}", u.getUsername());
+            }
+        });
     }
 
     private void ensureDemoCase() {

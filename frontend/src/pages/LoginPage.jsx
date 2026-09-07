@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   Shield, 
   ShieldCheck, 
@@ -28,16 +28,22 @@ import {
 } from 'lucide-react';
 
 export const LoginPage = () => {
-  const { login, verifyMfa } = useAuth();
+  const { login } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
-  const [username, setUsername] = useState('');
+  const [username, setUsername] = useState(() => searchParams.get('username') || '');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberTerminal, setRememberTerminal] = useState(true);
+
+  useEffect(() => {
+    const qUser = searchParams.get('username');
+    if (qUser) {
+      setUsername(qUser);
+    }
+  }, [searchParams]);
   
-  const [mfaState, setMfaState] = useState(null); // { token, message }
-  const [totpCode, setTotpCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -60,33 +66,11 @@ export const LoginPage = () => {
     setError('');
     setLoading(true);
     try {
-      const res = await login(username, password);
-      if (res && res.mfaRequired) {
-        setMfaState({
-          token: res.mfaSessionToken,
-          message: res.message,
-        });
-      } else {
-        navigate('/dashboard', { replace: true });
-        window.location.href = '/dashboard';
-      }
-    } catch (err) {
-      setError(err.message || 'Authentication failed. Please verify your credentials.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleMfaSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
-    try {
-      await verifyMfa(mfaState.token, totpCode);
+      await login(username, password);
       navigate('/dashboard', { replace: true });
       window.location.href = '/dashboard';
     } catch (err) {
-      setError(err.message || 'TOTP code verification failed');
+      setError(err.message || 'Authentication failed. Please verify your credentials.');
     } finally {
       setLoading(false);
     }
@@ -275,156 +259,108 @@ export const LoginPage = () => {
                 )}
 
                 {/* Standard Authentication Form */}
-                {!mfaState ? (
-                  <form onSubmit={handleStandardLogin} className="space-y-4">
-                    
-                    {/* Username Input */}
-                    <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <label className="text-xs font-semibold text-slate-300 font-mono flex items-center gap-1.5">
-                          <UserCheck className="w-3.5 h-3.5 text-violet-400" />
-                          <span>BADGE ID / USERNAME</span>
-                        </label>
-                      </div>
-                      <div className="relative">
-                        <input
-                          type="text"
-                          required
-                          value={username}
-                          onChange={(e) => setUsername(e.target.value)}
-                          placeholder="Enter Badge ID or Username"
-                          className="w-full pl-3.5 pr-10 py-3 bg-[#131728] border border-white/[0.08] hover:border-white/[0.18] focus:border-violet-500 rounded-2xl text-xs text-white placeholder-slate-500 focus:outline-none transition shadow-inner font-mono"
-                        />
-                        {username && (
-                          <button
-                            type="button"
-                            onClick={() => setUsername('')}
-                            className="absolute right-3.5 top-3.5 text-slate-500 hover:text-white transition"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Password Input */}
-                    <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <label className="text-xs font-semibold text-slate-300 font-mono flex items-center gap-1.5">
-                          <Lock className="w-3.5 h-3.5 text-violet-400" />
-                          <span>SECURITY PASSKEY</span>
-                        </label>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setRecoveryBadge(username || '');
-                            setRecoveryModalOpen(true);
-                          }}
-                          className="text-[11px] font-mono text-violet-400 hover:text-violet-300 transition cursor-pointer"
-                        >
-                          Forgot Passkey?
-                        </button>
-                      </div>
-                      <div className="relative">
-                        <input
-                          type={showPassword ? 'text' : 'password'}
-                          required
-                          value={password}
-                          onChange={(e) => setPassword(e.target.value)}
-                          placeholder="Enter Security Passkey"
-                          className="w-full pl-3.5 pr-10 py-3 bg-[#131728] border border-white/[0.08] hover:border-white/[0.18] focus:border-violet-500 rounded-2xl text-xs text-white placeholder-slate-500 focus:outline-none transition shadow-inner font-mono"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowPassword(!showPassword)}
-                          className="absolute right-3.5 top-3.5 text-slate-400 hover:text-white transition"
-                          title={showPassword ? 'Hide password' : 'Show password'}
-                        >
-                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Remember Workstation Checkbox */}
-                    <div className="flex items-center justify-between pt-1 text-xs">
-                      <label className="flex items-center gap-2 text-slate-400 cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={rememberTerminal}
-                          onChange={(e) => setRememberTerminal(e.target.checked)}
-                          className="rounded border-slate-700 bg-slate-900 text-violet-600 focus:ring-violet-500 w-3.5 h-3.5 cursor-pointer"
-                        />
-                        <span className="font-mono text-[11px]">Remember authorized terminal</span>
+                <form onSubmit={handleStandardLogin} className="space-y-4">
+                  
+                  {/* Username Input */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-semibold text-slate-300 font-mono flex items-center gap-1.5">
+                        <UserCheck className="w-3.5 h-3.5 text-violet-400" />
+                        <span>BADGE ID / USERNAME</span>
                       </label>
                     </div>
-
-                    {/* Submit Button */}
-                    <button
-                      type="submit"
-                      disabled={loading}
-                      className="w-full mt-3 flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-gradient-to-r from-violet-600 via-indigo-600 to-cyan-600 hover:from-violet-500 hover:via-indigo-500 hover:to-cyan-500 text-white text-xs font-semibold tracking-wider uppercase transition shadow-xl shadow-violet-600/35 border border-white/20 disabled:opacity-50 cursor-pointer"
-                    >
-                      {loading ? (
-                        <>
-                          <RefreshCw className="w-4 h-4 animate-spin" />
-                          <span>Verifying Cryptographic Credentials...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Lock className="w-4 h-4" />
-                          <span>Authorize Vault Session</span>
-                          <ArrowRight className="w-3.5 h-3.5 ml-1" />
-                        </>
-                      )}
-                    </button>
-                  </form>
-                ) : (
-                  /* MFA TOTP Verification View */
-                  <form onSubmit={handleMfaSubmit} className="space-y-4">
-                    <div className="p-4 rounded-2xl bg-violet-950/50 border border-violet-800 text-violet-200 text-xs space-y-1">
-                      <p className="font-semibold flex items-center gap-1.5">
-                        <ShieldAlert className="w-4 h-4 text-cyan-400" />
-                        <span>Two-Factor Authentication Required</span>
-                      </p>
-                      <p className="text-[11px] text-violet-300/80 font-mono">
-                        Enter the 6-digit TOTP code generated by your hardware authenticator.
-                      </p>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-medium text-slate-300 mb-1 font-mono">
-                        6-DIGIT MFA TOTP CODE
-                      </label>
+                    <div className="relative">
                       <input
                         type="text"
-                        maxLength={6}
                         required
-                        value={totpCode}
-                        onChange={(e) => setTotpCode(e.target.value)}
-                        placeholder="123456"
-                        className="w-full px-4 py-3 text-center tracking-[0.5em] font-mono text-xl bg-[#131728] border border-violet-500 rounded-2xl text-violet-200 focus:outline-none"
-                        autoFocus
+                        value={username}
+                        onChange={(e) => setUsername(e.target.value)}
+                        placeholder="Enter Badge ID or Username"
+                        className="w-full pl-3.5 pr-10 py-3 bg-[#131728] border border-white/[0.08] hover:border-white/[0.18] focus:border-violet-500 rounded-2xl text-xs text-white placeholder-slate-500 focus:outline-none transition shadow-inner font-mono"
                       />
+                      {username && (
+                        <button
+                          type="button"
+                          onClick={() => setUsername('')}
+                          className="absolute right-3.5 top-3.5 text-slate-500 hover:text-white transition"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
+                  </div>
 
-                    <div className="flex gap-2">
+                  {/* Password Input */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-semibold text-slate-300 font-mono flex items-center gap-1.5">
+                        <Lock className="w-3.5 h-3.5 text-violet-400" />
+                        <span>SECURITY PASSKEY</span>
+                      </label>
                       <button
                         type="button"
-                        onClick={() => setMfaState(null)}
-                        className="w-1/3 py-3 px-3 rounded-2xl bg-[#141829] hover:bg-[#1B2138] text-slate-300 text-xs font-medium transition cursor-pointer border border-white/[0.08]"
+                        onClick={() => {
+                          setRecoveryBadge(username || '');
+                          setRecoveryModalOpen(true);
+                        }}
+                        className="text-[11px] font-mono text-violet-400 hover:text-violet-300 transition cursor-pointer"
                       >
-                        Back
-                      </button>
-                      <button
-                        type="submit"
-                        disabled={loading || totpCode.length !== 6}
-                        className="w-2/3 py-3 px-4 rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white text-xs font-semibold uppercase tracking-wider transition disabled:opacity-50 cursor-pointer shadow-lg shadow-violet-600/30"
-                      >
-                        {loading ? 'Verifying...' : 'Verify & Enter'}
+                        Forgot Passkey?
                       </button>
                     </div>
-                  </form>
-                )}
+                    <div className="relative">
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        required
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="Enter Security Passkey"
+                        className="w-full pl-3.5 pr-10 py-3 bg-[#131728] border border-white/[0.08] hover:border-white/[0.18] focus:border-violet-500 rounded-2xl text-xs text-white placeholder-slate-500 focus:outline-none transition shadow-inner font-mono"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3.5 top-3.5 text-slate-400 hover:text-white transition"
+                        title={showPassword ? 'Hide password' : 'Show password'}
+                      >
+                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Remember Workstation Checkbox */}
+                  <div className="flex items-center justify-between pt-1 text-xs">
+                    <label className="flex items-center gap-2 text-slate-400 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={rememberTerminal}
+                        onChange={(e) => setRememberTerminal(e.target.checked)}
+                        className="rounded border-slate-700 bg-slate-900 text-violet-600 focus:ring-violet-500 w-3.5 h-3.5 cursor-pointer"
+                      />
+                      <span className="font-mono text-[11px]">Remember authorized terminal</span>
+                    </label>
+                  </div>
+
+                  {/* Submit Button */}
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full mt-3 flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-gradient-to-r from-violet-600 via-indigo-600 to-cyan-600 hover:from-violet-500 hover:via-indigo-500 hover:to-cyan-500 text-white text-xs font-semibold tracking-wider uppercase transition shadow-xl shadow-violet-600/35 border border-white/20 disabled:opacity-50 cursor-pointer"
+                  >
+                    {loading ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        <span>Verifying Cryptographic Credentials...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Lock className="w-4 h-4" />
+                        <span>Authorize Vault Session</span>
+                        <ArrowRight className="w-3.5 h-3.5 ml-1" />
+                      </>
+                    )}
+                  </button>
+                </form>
 
                 {/* Footer Notice */}
                 <div className="mt-6 pt-4 border-t border-white/[0.06] flex items-center justify-between text-[11px] font-mono text-slate-500">

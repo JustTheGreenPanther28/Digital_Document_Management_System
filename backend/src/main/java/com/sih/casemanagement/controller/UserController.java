@@ -30,7 +30,7 @@ public class UserController {
     }
 
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SENIOR_OFFICER') or hasAuthority('ADMIN_USER_PROVISION')")
     public ResponseEntity<User> createUser(@Valid @RequestBody CreateUserRequest request) {
         User created = userService.createUser(
             request.username(),
@@ -46,7 +46,7 @@ public class UserController {
     }
 
     @PatchMapping("/{id}/status")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SENIOR_OFFICER') or hasAuthority('ADMIN_USER_PROVISION')")
     public ResponseEntity<User> updateStatus(
         @PathVariable UUID id,
         @RequestBody Map<String, Boolean> body

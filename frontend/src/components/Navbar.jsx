@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { useAuth, getAvailableAccounts } from '../context/AuthContext';
+import { useAuth, getAvailableAccounts, isUserLocked } from '../context/AuthContext';
 import {
   Shield,
   ShieldAlert,
@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 
 export const Navbar = () => {
-  const { user, quickSwitch, logout } = useAuth();
+  const { user, quickSwitch, logout, hasRole } = useAuth();
   const navigate = useNavigate();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -35,6 +35,9 @@ export const Navbar = () => {
   const searchInputRef = useRef(null);
   const searchContainerRef = useRef(null);
   const dropdownRef = useRef(null);
+
+  const canViewAlerts = hasRole && (hasRole('ADMIN') || hasRole('AUDITOR') || hasRole('SENIOR_OFFICER'));
+  const canCreateCase = hasRole && (hasRole('ADMIN') || hasRole('SENIOR_OFFICER') || hasRole('INVESTIGATOR'));
 
   // Global Ctrl+K / Cmd+K listener
   useEffect(() => {
@@ -291,31 +294,35 @@ export const Navbar = () => {
 
       {/* 3. Right Action Buttons & Officer Profile Dropdown */}
       <div className="flex items-center gap-2.5 sm:gap-3">
-        {/* Register Case Action Pill */}
-        <button
-          type="button"
-          onClick={() => {
-            navigate('/cases?new=true', { state: { openModal: true } });
-            window.dispatchEvent(new CustomEvent('open-new-dossier-modal'));
-          }}
-          className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-semibold text-xs transition shadow-lg shadow-violet-600/30 border border-violet-400/30 group cursor-pointer"
-        >
-          <FolderPlus className="w-3.5 h-3.5 text-violet-200 group-hover:scale-110 transition" />
-          <span className="hidden sm:inline-block">New Dossier</span>
-          <Lock className="w-2.5 h-2.5 text-violet-300 ml-0.5" />
-        </button>
+        {/* Register Case Action Pill (Only for Senior Officers, Investigators, Admins) */}
+        {canCreateCase && (
+          <button
+            type="button"
+            onClick={() => {
+              navigate('/cases?new=true', { state: { openModal: true } });
+              window.dispatchEvent(new CustomEvent('open-new-dossier-modal'));
+            }}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-semibold text-xs transition shadow-lg shadow-violet-600/30 border border-violet-400/30 group cursor-pointer"
+          >
+            <FolderPlus className="w-3.5 h-3.5 text-violet-200 group-hover:scale-110 transition" />
+            <span className="hidden sm:inline-block">New Dossier</span>
+            <Lock className="w-2.5 h-2.5 text-violet-300 ml-0.5" />
+          </button>
+        )}
 
-        {/* Threat Alert Notification Bell */}
-        <Link
-          to="/security-alerts"
-          className="relative w-9 h-9 rounded-full bg-[#141829] hover:bg-[#1A2035] border border-white/[0.08] hover:border-violet-500/40 text-slate-300 hover:text-white flex items-center justify-center transition group shadow-sm flex-shrink-0"
-          title="Threat Intelligence & Security Alerts"
-        >
-          <Bell className="w-4 h-4 text-slate-400 group-hover:text-violet-300 transition" />
-          <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] px-1 items-center justify-center rounded-full bg-violet-600 border-2 border-[#08090E] text-[9px] font-mono font-black text-white shadow-md shadow-violet-900/60">
-            2
-          </span>
-        </Link>
+        {/* Threat Alert Notification Bell - Only shown to Admin, Auditor, Senior Officer */}
+        {canViewAlerts && (
+          <Link
+            to="/security-alerts"
+            className="relative w-9 h-9 rounded-full bg-[#141829] hover:bg-[#1A2035] border border-white/[0.08] hover:border-violet-500/40 text-slate-300 hover:text-white flex items-center justify-center transition group shadow-sm flex-shrink-0"
+            title="Threat Intelligence & Security Alerts"
+          >
+            <Bell className="w-4 h-4 text-slate-400 group-hover:text-violet-300 transition" />
+            <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] px-1 items-center justify-center rounded-full bg-violet-600 border-2 border-[#08090E] text-[9px] font-mono font-black text-white shadow-md shadow-violet-900/60">
+              2
+            </span>
+          </Link>
+        )}
 
         {/* Officer Profile & Persona Switcher Capsule (Anchored on the RIGHT) */}
         <div className="relative" ref={dropdownRef}>
@@ -375,42 +382,60 @@ export const Navbar = () => {
                 </div>
               </div>
 
-              {/* Fast Role / Persona Switcher Section */}
+              {/* Switch Officer / Re-Authenticate Section */}
               <div className="py-3">
                 <div className="flex items-center justify-between px-1 mb-2">
                   <div className="flex items-center gap-1.5">
                     <UserCheck className="w-3.5 h-3.5 text-violet-400" />
                     <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">
-                      Instant Persona Switcher
+                      Switch Officer Account
                     </span>
                   </div>
-                  <span className="text-[10px] text-slate-400 font-mono">ABAC Tester</span>
+                  <span className="text-[10px] text-slate-400 font-mono">Re-Authenticate</span>
                 </div>
 
                 <div className="max-h-60 overflow-y-auto space-y-1.5 pr-1 custom-scrollbar">
                   {getAvailableAccounts().map((acc) => {
                     const isSelected = user?.username === acc.username;
+                    const locked = isUserLocked ? isUserLocked(acc.username) : acc.isLocked;
                     return (
                       <button
                         key={acc.username}
+                        disabled={locked}
                         onClick={() => {
-                          quickSwitch(acc.username);
+                          if (locked) {
+                            alert(`Account @${acc.username} is locked due to consecutive failed attempts or admin policy. Access is suspended.`);
+                            return;
+                          }
                           setDropdownOpen(false);
+                          logout(acc.username);
                         }}
                         className={`w-full text-left p-2.5 rounded-2xl text-xs transition flex items-center justify-between border ${
-                          isSelected
+                          locked
+                            ? 'bg-rose-950/20 border-rose-900/40 text-slate-400 opacity-60 cursor-not-allowed'
+                            : isSelected
                             ? 'bg-violet-600/20 border-violet-500/70 text-violet-100 shadow-md shadow-violet-950/40 ring-1 ring-violet-500/40'
                             : 'bg-[#121524] hover:bg-[#181D33] border-white/[0.05] text-slate-300 hover:border-white/[0.1]'
                         }`}
+                        title={locked ? `Account @${acc.username} is locked` : `Authenticate as ${acc.name}`}
                       >
                         <div className="min-w-0 flex-1 pr-2">
                           <div className="flex items-center gap-2">
-                            <span className="font-semibold text-slate-200 truncate">{acc.name}</span>
-                            {isSelected && (
+                            <span className={`font-semibold truncate ${locked ? 'text-rose-300/80 line-through' : 'text-slate-200'}`}>
+                              {acc.name}
+                            </span>
+                            {isSelected && !locked && (
                               <CheckCircle2 className="w-3.5 h-3.5 text-violet-400 flex-shrink-0" />
                             )}
+                            {locked && (
+                              <span className="inline-flex items-center gap-1 text-[9px] font-mono px-1.5 py-0.2 rounded bg-rose-950/80 text-rose-300 border border-rose-800">
+                                <Lock className="w-2.5 h-2.5" /> LOCKED
+                              </span>
+                            )}
                           </div>
-                          <div className="text-[10px] text-slate-400 truncate mt-0.5">{acc.desc}</div>
+                          <div className="text-[10px] text-slate-400 truncate mt-0.5">
+                            {locked ? 'Access Suspended' : `Switch session to @${acc.username}`}
+                          </div>
                         </div>
                         <span className={`text-[9px] font-mono px-2 py-0.5 rounded-full border flex-shrink-0 font-bold ${getRoleBadgeColor(acc.role)}`}>
                           {acc.role}

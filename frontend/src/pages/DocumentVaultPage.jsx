@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { api } from '../services/api';
 import { Link } from 'react-router-dom';
 import { 
@@ -56,10 +57,28 @@ const FALLBACK_VAULT_DOCS = [
     sha256Hash: '3f5481a89cde8712398412397129381723981273981729381729381729381273', 
     locked: true, 
     uploadedAt: '2026-08-18T16:00:00Z' 
+  },
+  { 
+    id: 'doc-104', 
+    caseId: '4', 
+    caseNumber: 'CASE-2026-004', 
+    title: 'Public Judicial Gazette & Seizure Proclamation', 
+    documentType: 'POLICE_REPORT', 
+    classification: 'PUBLIC', 
+    originalFilename: 'public_judicial_proclamation.pdf', 
+    fileSize: 312450, 
+    sha256Hash: '5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8', 
+    locked: false, 
+    uploadedAt: '2026-08-22T09:30:00Z' 
   }
 ];
 
+import { useAuth } from '../context/AuthContext';
+import { canClearanceAccess } from '../services/abac';
+import { logDocumentDownload, logDocumentUpload } from '../services/auditLogger';
+
 export const DocumentVaultPage = () => {
+  const { user, hasRole } = useAuth();
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -131,6 +150,21 @@ export const DocumentVaultPage = () => {
 
   const handleDownload = async (doc) => {
     try {
+      const isAuthorized = canClearanceAccess(user?.clearance, doc.classification);
+      if (!isAuthorized) {
+        alert(`ACCESS DENIED: Clearance Violation\n\nThis document is classified as "${doc.classification}". Your current security clearance is "${user?.clearance || 'PUBLIC'}".\n\nUnder National Security & Forensic Vault Protocols, only personnel possessing ${doc.classification} or higher clearance are authorized to access or download this artifact.`);
+        return;
+      }
+
+      // Record download audit event into immutable ledger
+      logDocumentDownload({
+        docTitle: doc.title || doc.originalFilename,
+        docId: doc.id,
+        caseNumber: doc.caseNumber || 'CASE-2026-001',
+        sha256Hash: doc.sha256Hash,
+        fileSize: doc.fileSize
+      });
+
       // 1. If stored data URL/blob exists in client storage for uploaded file
       if (doc.fileDataUrl) {
         const a = document.createElement('a');
@@ -255,12 +289,33 @@ modification, tamper event, or parity mismatch was detected during verification.
       const finalDoc = resDoc ? { ...resDoc, fileDataUrl } : newDocItem;
       saveVaultDoc(finalDoc);
       setDocuments(prev => [finalDoc, ...prev]);
+
+      // Record Upload to Audit Ledger
+      logDocumentUpload({
+        docTitle: docTitle || uploadFile.name,
+        docId: finalDoc.id,
+        caseNumber: selectedCase.caseNumber,
+        classification: docClassification,
+        fileSize: uploadFile.size,
+        sha256Hash: finalDoc.sha256Hash
+      });
+
       setShowUploadModal(false);
       setUploadFile(null);
       setDocTitle('');
     } catch (err) {
       saveVaultDoc(newDocItem);
       setDocuments(prev => [newDocItem, ...prev]);
+
+      logDocumentUpload({
+        docTitle: docTitle || uploadFile.name,
+        docId: newDocItem.id,
+        caseNumber: selectedCase.caseNumber,
+        classification: docClassification,
+        fileSize: uploadFile.size,
+        sha256Hash: newDocItem.sha256Hash
+      });
+
       setShowUploadModal(false);
       setUploadFile(null);
       setDocTitle('');
@@ -269,7 +324,10 @@ modification, tamper event, or parity mismatch was detected during verification.
     }
   };
 
-  const filteredDocs = documents.filter((d) =>
+  // Mandatory Access Control (MAC): documents exceeding user clearance are strictly invisible
+  const clearedDocs = documents.filter((d) => canClearanceAccess(user?.clearance, d.classification));
+
+  const filteredDocs = clearedDocs.filter((d) =>
     d.title?.toLowerCase().includes(search.toLowerCase()) ||
     d.caseNumber?.toLowerCase().includes(search.toLowerCase()) ||
     d.originalFilename?.toLowerCase().includes(search.toLowerCase()) ||
@@ -284,13 +342,16 @@ modification, tamper event, or parity mismatch was detected during verification.
             <span className="text-[10px] font-mono font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30">
               AES-256 Vault Protected
             </span>
+            <span className="text-[10px] font-mono font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+              Your Clearance: {user?.clearance || 'RESTRICTED'}
+            </span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight flex items-center gap-2.5">
             <FileLock2 className="w-6 h-6 text-blue-400" />
             <span>Encrypted Document Vault</span>
           </h1>
           <p className="text-xs text-slate-400 mt-0.5">
-            Artifacts protected under certified digital vault encryption and compliance standards
+            Artifacts protected under certified digital vault encryption and ABAC clearance gating
           </p>
         </div>
 
@@ -315,12 +376,13 @@ modification, tamper event, or parity mismatch was detected during verification.
       </div>
 
       <div className="obsidian-card rounded-3xl overflow-hidden">
-        <div className="p-4 border-b border-white/[0.08] flex items-center justify-between">
-          <h3 className="text-sm font-bold text-slate-100 uppercase tracking-wider">
-            Repository Documents ({filteredDocs.length})
+        <div className="p-5 border-b border-white/[0.08] flex items-center justify-between">
+          <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+            <FileText className="w-4 h-4 text-blue-400" />
+            <span>Vault Records ({filteredDocs.length})</span>
           </h3>
-          <span className="text-xs font-mono text-blue-400">
-            INTEGRITY & MALWARE VERIFIED
+          <span className="text-[11px] font-mono text-slate-400">
+            Enforcing Security Clearance Gating
           </span>
         </div>
 
@@ -334,64 +396,101 @@ modification, tamper event, or parity mismatch was detected during verification.
               No documents available across your authorized cases.
             </div>
           ) : (
-            filteredDocs.map((doc) => (
-              <div key={doc.id} className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-white/[0.02] transition">
-                <div className="space-y-1.5">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-slate-100">{doc.title}</span>
-                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">
-                      {doc.documentType}
-                    </span>
-                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded uppercase font-semibold bg-amber-950 text-amber-300 border border-amber-800">
-                      {doc.classification}
-                    </span>
-                    {doc.locked && (
-                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 flex items-center gap-1 font-semibold">
-                        <Lock className="w-2.5 h-2.5" />
-                        DIGITALLY SIGNED & SEALED
+            filteredDocs.map((doc) => {
+              const isAuthorized = canClearanceAccess(user?.clearance, doc.classification);
+
+              return (
+                <div key={doc.id} className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-white/[0.02] transition">
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs font-bold text-slate-100">{doc.title}</span>
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">
+                        {doc.documentType}
                       </span>
+                      <span className={`text-[10px] font-mono px-2 py-0.5 rounded uppercase font-bold border ${
+                        doc.classification === 'TOP_SECRET' ? 'bg-rose-950 text-rose-300 border-rose-800' :
+                        doc.classification === 'SECRET' ? 'bg-amber-950 text-amber-300 border-amber-800' :
+                        doc.classification === 'CONFIDENTIAL' ? 'bg-blue-950 text-blue-300 border-blue-800' :
+                        'bg-slate-850 text-slate-300 border-slate-700'
+                      }`}>
+                        {doc.classification}
+                      </span>
+
+                      {!isAuthorized && (
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/40 flex items-center gap-1 font-bold">
+                          <Lock className="w-2.5 h-2.5" />
+                          CLEARANCE INSUFFICIENT
+                        </span>
+                      )}
+
+                      {doc.locked && isAuthorized && (
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 flex items-center gap-1 font-semibold">
+                          <Lock className="w-2.5 h-2.5" />
+                          DIGITALLY SIGNED & SEALED
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="text-xs font-mono text-slate-400 flex items-center gap-3">
+                      <span>Case: <Link to={`/cases/${doc.caseId}`} className="text-blue-400 hover:underline">{doc.caseNumber}</Link></span>
+                      <span>File: {doc.originalFilename}</span>
+                      <span>Size: {Math.round((doc.fileSize || 1024) / 1024)} KB</span>
+                    </div>
+
+                    <div className="flex items-center gap-2 text-[10px] font-mono text-slate-500">
+                      {isAuthorized ? (
+                        <>
+                          <span className="truncate max-w-[400px]">Verification Seal: <span className="text-emerald-400">{doc.sha256Hash}</span></span>
+                          <button onClick={() => copyHash(doc.sha256Hash)} className="hover:text-slate-200" title="Copy SHA-256 Hash">
+                            <Copy className="w-3 h-3" />
+                          </button>
+                        </>
+                      ) : (
+                        <span className="text-rose-400/80 italic font-mono flex items-center gap-1">
+                          <Lock className="w-3 h-3" />
+                          Seal & File Content Masked — Requires {doc.classification} Clearance
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2.5 flex-shrink-0">
+                    {isAuthorized ? (
+                      <button
+                        onClick={() => handleDownload(doc)}
+                        className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold uppercase tracking-wider flex items-center gap-1.5 transition whitespace-nowrap cursor-pointer shadow-md shadow-blue-600/30 active:scale-95"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span>Download</span>
+                      </button>
+                    ) : (
+                      <button
+                        disabled
+                        className="px-3.5 py-2 rounded-xl bg-slate-800/80 text-slate-500 border border-slate-700/60 text-xs font-semibold uppercase tracking-wider flex items-center gap-1.5 cursor-not-allowed opacity-75"
+                        title={`Access Blocked: Your clearance level (${user?.clearance || 'PUBLIC'}) cannot download ${doc.classification} documents.`}
+                      >
+                        <Lock className="w-3.5 h-3.5 text-rose-400" />
+                        <span>Locked</span>
+                      </button>
                     )}
-                  </div>
-
-                  <div className="text-xs font-mono text-slate-400 flex items-center gap-3">
-                    <span>Case: <Link to={`/cases/${doc.caseId}`} className="text-blue-400 hover:underline">{doc.caseNumber}</Link></span>
-                    <span>File: {doc.originalFilename}</span>
-                    <span>Size: {Math.round((doc.fileSize || 1024) / 1024)} KB</span>
-                  </div>
-
-                  <div className="flex items-center gap-2 text-[10px] font-mono text-slate-500">
-                    <span className="truncate max-w-[400px]">Verification Seal: <span className="text-emerald-400">{doc.sha256Hash}</span></span>
-                    <button onClick={() => copyHash(doc.sha256Hash)} className="hover:text-slate-200" title="Copy SHA-256 Hash">
-                      <Copy className="w-3 h-3" />
-                    </button>
+                    <Link
+                      to={`/cases/${doc.caseId}`}
+                      className="px-3 py-2 rounded-xl bg-[#181D33] hover:bg-[#202744] text-slate-300 hover:text-white transition flex items-center gap-1.5 text-xs font-mono border border-slate-700/60 active:scale-95"
+                      title={`Open Dossier for Case ${doc.caseNumber}`}
+                    >
+                      <span className="text-[11px] hidden sm:inline text-slate-300">Case Dossier</span>
+                      <ArrowUpRight className="w-4 h-4 text-blue-400" />
+                    </Link>
                   </div>
                 </div>
-
-                <div className="flex items-center gap-2.5">
-                  <button
-                    onClick={() => handleDownload(doc)}
-                    className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold uppercase tracking-wider flex items-center gap-1.5 transition whitespace-nowrap cursor-pointer shadow-md shadow-blue-600/30 active:scale-95"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    <span>Download</span>
-                  </button>
-                  <Link
-                    to={`/cases/${doc.caseId}`}
-                    className="px-3 py-2 rounded-xl bg-[#181D33] hover:bg-[#202744] text-slate-300 hover:text-white transition flex items-center gap-1.5 text-xs font-mono border border-slate-700/60 active:scale-95"
-                    title={`Open Dossier for Case ${doc.caseNumber}`}
-                  >
-                    <span className="text-[11px] hidden sm:inline text-slate-300">Case Dossier</span>
-                    <ArrowUpRight className="w-4 h-4 text-blue-400" />
-                  </Link>
-                </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>
 
-      {showUploadModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-150">
+      {showUploadModal && createPortal(
+        <div className="fixed inset-0 z-[99999] w-screen h-screen min-h-screen flex items-center justify-center bg-black/95 backdrop-blur-2xl p-4 animate-in fade-in duration-150">
           <div className="obsidian-card w-full max-w-lg p-6 rounded-3xl shadow-2xl space-y-4 border border-white/10">
             <div className="flex items-center justify-between border-b border-white/[0.08] pb-3">
               <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
@@ -414,11 +513,13 @@ modification, tamper event, or parity mismatch was detected during verification.
                   onChange={(e) => setUploadCaseId(e.target.value)}
                   className="w-full px-3 py-2 bg-[#121524] border border-white/[0.08] rounded-xl text-xs text-white focus:outline-none focus:border-blue-500"
                 >
-                  {cases.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.caseNumber} — {c.title}
-                    </option>
-                  ))}
+                  {cases
+                    .filter((c) => canClearanceAccess(user?.clearance, c.classification))
+                    .map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.caseNumber} — {c.title}
+                      </option>
+                    ))}
                 </select>
               </div>
 
@@ -457,10 +558,17 @@ modification, tamper event, or parity mismatch was detected during verification.
                     onChange={(e) => setDocClassification(e.target.value)}
                     className="w-full px-3 py-2 bg-[#121524] border border-white/[0.08] rounded-xl text-xs text-white focus:outline-none focus:border-blue-500"
                   >
-                    <option value="RESTRICTED">RESTRICTED</option>
-                    <option value="CONFIDENTIAL">CONFIDENTIAL</option>
-                    <option value="SECRET">SECRET</option>
-                    <option value="TOP_SECRET">TOP_SECRET</option>
+                    {[
+                      { value: 'PUBLIC', label: 'PUBLIC (Universal Public Record)' },
+                      { value: 'RESTRICTED', label: 'RESTRICTED' },
+                      { value: 'CONFIDENTIAL', label: 'CONFIDENTIAL' },
+                      { value: 'SECRET', label: 'SECRET' },
+                      { value: 'TOP_SECRET', label: 'TOP_SECRET' },
+                    ]
+                      .filter((opt) => canClearanceAccess(user?.clearance, opt.value))
+                      .map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
                   </select>
                 </div>
               </div>
@@ -493,7 +601,8 @@ modification, tamper event, or parity mismatch was detected during verification.
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

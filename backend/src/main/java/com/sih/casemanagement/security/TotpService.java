@@ -1,29 +1,23 @@
 package com.sih.casemanagement.security;
 
-import com.warrenstrange.googleauth.GoogleAuthenticator;
-import com.warrenstrange.googleauth.GoogleAuthenticatorKey;
-import com.warrenstrange.googleauth.GoogleAuthenticatorQRGenerator;
 import org.springframework.stereotype.Service;
 
+/**
+ * TOTP Service - Removed. MFA/TOTP has been completely removed from the system.
+ * This stub remains to prevent Spring wiring errors from any residual references.
+ */
 @Service
 public class TotpService {
 
-    private final GoogleAuthenticator gAuth = new GoogleAuthenticator();
-
     public String generateSecretKey() {
-        GoogleAuthenticatorKey key = gAuth.createCredentials();
-        return key.getKey();
+        return "DISABLED";
     }
 
     public String getOtpAuthUrl(String username, String secretKey) {
-        GoogleAuthenticatorKey key = new GoogleAuthenticatorKey.Builder(secretKey).build();
-        return GoogleAuthenticatorQRGenerator.getOtpAuthTotpURL("SIH190-CaseManagement", username, key);
+        return "";
     }
 
     public boolean verifyCode(String secretKey, int code) {
-        if (secretKey == null || secretKey.isBlank()) {
-            return false;
-        }
-        return gAuth.authorize(secretKey, code);
+        return false;
     }
 }

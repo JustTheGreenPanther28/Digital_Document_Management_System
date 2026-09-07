@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
@@ -22,7 +23,9 @@ import {
   ShieldAlert,
   UserCheck
 } from 'lucide-react';
-import { checkCaseAccess, getStoredTeamAssignments as getStoredAbacAssignments } from '../services/abac';
+import { checkCaseAccess, canClearanceAccess, getStoredTeamAssignments as getStoredAbacAssignments } from '../services/abac';
+import { logCaseCreated } from '../services/auditLogger';
+import Pagination from '../components/Pagination';
 
 const FALLBACK_CASES = [
   {
@@ -76,6 +79,23 @@ const FALLBACK_CASES = [
       { username: 'forensic_officer', fullName: 'Dr. Evelyn Reed', roleInCase: 'FORENSIC_EXPERT', clearance: 'SECRET' },
       { username: 'custodian', fullName: 'Officer Michael Vance', roleInCase: 'EVIDENCE_CUSTODIAN', clearance: 'CONFIDENTIAL' }
     ]
+  },
+  {
+    id: '4',
+    caseNumber: 'CASE-2026-004',
+    title: 'State vs Metro Automated Transit & Toll Registry Dispute',
+    description: 'Public judicial inquiry into transit ticketing anomaly and automated municipal toll violation hearings.',
+    firNumber: 'FIR-2026-0105',
+    investigatingAgency: 'Metropolitan Public Traffic & Court Division',
+    priority: 'LOW',
+    classification: 'PUBLIC',
+    status: 'HEARING_SCHEDULED',
+    legalHold: false,
+    createdByUsername: 'court_officer',
+    teamAssignments: [
+      { username: 'court_officer', fullName: 'Registrar Arthur Pendelton', roleInCase: 'COURT_REGISTRAR', clearance: 'PUBLIC' },
+      { username: 'prosecutor', fullName: 'Counsel Diane Lockhart', roleInCase: 'PUBLIC_PROSECUTOR', clearance: 'SECRET' }
+    ]
   }
 ];
 
@@ -89,28 +109,41 @@ export const CasesListPage = () => {
   const [error, setError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(6);
   const [showCreateModal, setShowCreateModal] = useState(false);
-
   const [modalError, setModalError] = useState('');
+
+  const canCreate = hasRole && (hasRole('SENIOR_OFFICER') || hasRole('ADMIN') || hasRole('INVESTIGATOR'));
 
   // Auto-open modal if navigated from "New Dossier" button
   useEffect(() => {
     if (searchParams.get('new') === 'true' || location.state?.openModal) {
-      setShowCreateModal(true);
+      if (canCreate) {
+        setShowCreateModal(true);
+      } else {
+        alert('ACCESS DENIED: Case dossier creation is restricted to Senior Officers, Lead Investigators, and Administrators.');
+      }
       if (searchParams.get('new') === 'true') {
         const next = new URLSearchParams(searchParams);
         next.delete('new');
         setSearchParams(next, { replace: true });
       }
     }
-  }, [searchParams, location]);
+  }, [searchParams, location, canCreate]);
 
   // Global listener for "New Dossier" action from any component
   useEffect(() => {
-    const handleOpen = () => setShowCreateModal(true);
+    const handleOpen = () => {
+      if (canCreate) {
+        setShowCreateModal(true);
+      } else {
+        alert('ACCESS DENIED: Case dossier creation is restricted to Senior Officers, Lead Investigators, and Administrators.');
+      }
+    };
     window.addEventListener('open-new-dossier-modal', handleOpen);
     return () => window.removeEventListener('open-new-dossier-modal', handleOpen);
-  }, []);
+  }, [canCreate]);
 
   // New Case Form
   const [formData, setFormData] = useState({
@@ -174,6 +207,10 @@ export const CasesListPage = () => {
 
   const handleCreateCase = async (e) => {
     e.preventDefault();
+    if (!canCreate) {
+      setModalError('ACCESS DENIED: Case registration is restricted to Senior Officers, Lead Investigators, and Administrators.');
+      return;
+    }
     if (!formData.title.trim() || !formData.firNumber.trim()) {
       setModalError('Title and FIR Number are mandatory.');
       return;
@@ -238,6 +275,14 @@ export const CasesListPage = () => {
       saveCustomCase(newCaseObj);
       setCases((prev) => [newCaseObj, ...prev.filter(c => String(c.id) !== String(newCaseObj.id))]);
 
+      logCaseCreated({
+        caseNumber: newCaseObj.caseNumber,
+        title: newCaseObj.title,
+        classification: newCaseObj.classification,
+        priority: newCaseObj.priority,
+        firNumber: newCaseObj.firNumber
+      });
+
       setShowCreateModal(false);
       setFormData({
         title: '',
@@ -256,7 +301,12 @@ export const CasesListPage = () => {
     }
   };
 
-  const evaluatedCases = cases.map((c) => {
+  const isAdmin = hasRole('ADMIN');
+
+  // Mandatory Access Control (MAC): strictly filter out cases exceeding user's clearance level
+  const clearedCases = cases.filter((c) => canClearanceAccess(user?.clearance, c.classification));
+
+  const evaluatedCases = clearedCases.map((c) => {
     const access = checkCaseAccess(user, c);
     return { ...c, access };
   });
@@ -264,13 +314,17 @@ export const CasesListPage = () => {
   const myAccessibleCount = evaluatedCases.filter(c => c.access.allowed).length;
   const restrictedCount = evaluatedCases.filter(c => !c.access.allowed).length;
 
-  const filteredCases = evaluatedCases.filter((c) => {
+  // Strict Person-Level Isolation: Non-admin officers only see cases assigned to them
+  const poolCases = isAdmin ? evaluatedCases : evaluatedCases.filter(c => c.access.allowed);
+
+  const filteredCases = poolCases.filter((c) => {
     const matchesSearch = 
       c.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       c.caseNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       c.firNumber?.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = statusFilter === 'ALL' || c.status === statusFilter;
     const matchesScope = 
+      !isAdmin ||
       scopeFilter === 'ALL' ||
       (scopeFilter === 'ASSIGNED' && c.access.allowed) ||
       (scopeFilter === 'RESTRICTED' && !c.access.allowed);
@@ -278,7 +332,12 @@ export const CasesListPage = () => {
     return matchesSearch && matchesStatus && matchesScope;
   });
 
-  const canCreate = hasRole('SENIOR_OFFICER') || hasRole('ADMIN') || hasRole('INVESTIGATOR');
+  // Reset to page 1 whenever filter parameters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, statusFilter, scopeFilter]);
+
+  const paginatedCases = filteredCases.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   return (
     <div className="space-y-6 select-none max-w-7xl mx-auto">
@@ -323,44 +382,53 @@ export const CasesListPage = () => {
         </div>
       )}
 
-      {/* Scope Selector: All vs My Assigned vs Restricted */}
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          onClick={() => setScopeFilter('ALL')}
-          className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 ${
-            scopeFilter === 'ALL'
-              ? 'bg-violet-600 text-white shadow-md shadow-violet-600/30 border border-violet-400/40'
-              : 'bg-[#121524] text-slate-400 hover:text-white border border-white/[0.06]'
-          }`}
-        >
-          <Layers className="w-3.5 h-3.5" />
-          <span>All Dossiers ({cases.length})</span>
-        </button>
+      {/* Scope Selector: All vs My Assigned vs Restricted (For Admin Supervision) */}
+      {isAdmin ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => setScopeFilter('ALL')}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 ${
+              scopeFilter === 'ALL'
+                ? 'bg-violet-600 text-white shadow-md shadow-violet-600/30 border border-violet-400/40'
+                : 'bg-[#121524] text-slate-400 hover:text-white border border-white/[0.06]'
+            }`}
+          >
+            <Layers className="w-3.5 h-3.5" />
+            <span>All Dossiers ({cases.length})</span>
+          </button>
 
-        <button
-          onClick={() => setScopeFilter('ASSIGNED')}
-          className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 ${
-            scopeFilter === 'ASSIGNED'
-              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30 border border-emerald-400/40'
-              : 'bg-[#121524] text-slate-400 hover:text-white border border-white/[0.06]'
-          }`}
-        >
-          <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-          <span>My Authorized Cases ({myAccessibleCount})</span>
-        </button>
+          <button
+            onClick={() => setScopeFilter('ASSIGNED')}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 ${
+              scopeFilter === 'ASSIGNED'
+                ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30 border border-emerald-400/40'
+                : 'bg-[#121524] text-slate-400 hover:text-white border border-white/[0.06]'
+            }`}
+          >
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+            <span>My Authorized Cases ({myAccessibleCount})</span>
+          </button>
 
-        <button
-          onClick={() => setScopeFilter('RESTRICTED')}
-          className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 ${
-            scopeFilter === 'RESTRICTED'
-              ? 'bg-rose-600 text-white shadow-md shadow-rose-600/30 border border-rose-400/40'
-              : 'bg-[#121524] text-slate-400 hover:text-white border border-white/[0.06]'
-          }`}
-        >
-          <Lock className="w-3.5 h-3.5 text-rose-400" />
-          <span>Restricted / Unassigned ({restrictedCount})</span>
-        </button>
-      </div>
+          <button
+            onClick={() => setScopeFilter('RESTRICTED')}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 ${
+              scopeFilter === 'RESTRICTED'
+                ? 'bg-rose-600 text-white shadow-md shadow-rose-600/30 border border-rose-400/40'
+                : 'bg-[#121524] text-slate-400 hover:text-white border border-white/[0.06]'
+            }`}
+          >
+            <Lock className="w-3.5 h-3.5 text-rose-400" />
+            <span>Restricted / Unassigned ({restrictedCount})</span>
+          </button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2">
+          <span className="px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-emerald-600/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Assigned Dossiers ({myAccessibleCount})</span>
+          </span>
+        </div>
+      )}
 
       {/* Filters & Search Bar with Clean Spacing & Enhanced Scrollbar */}
       <div className="obsidian-card p-4 rounded-3xl flex flex-col md:flex-row items-center justify-between gap-4">
@@ -377,7 +445,7 @@ export const CasesListPage = () => {
 
         {/* Filter Option Pills with Dedicated Bottom Padding & Custom Scrollbar */}
         <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto pb-3 pt-1 custom-scrollbar-x">
-          {['ALL', 'REGISTERED', 'UNDER_INVESTIGATION', 'CHARGESHEET_FILED', 'IN_TRIAL', 'CLOSED'].map((status) => (
+          {['ALL', 'REGISTERED', 'UNDER_INVESTIGATION', 'CHARGESHEET_FILED', 'IN_TRIAL', 'CLOSED', 'ARCHIVED'].map((status) => (
             <button
               key={status}
               onClick={() => setStatusFilter(status)}
@@ -403,96 +471,108 @@ export const CasesListPage = () => {
           No case records match your query or clearance criteria.
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredCases.map((c) => (
-            <Link
-              key={c.id}
-              to={`/cases/${c.id}`}
-              className={`obsidian-card p-5 rounded-3xl transition group flex flex-col justify-between hover:scale-[1.01] ${
-                !c.access.allowed ? 'border-rose-500/30 hover:border-rose-500/50' : ''
-              }`}
-            >
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold font-mono text-violet-400 group-hover:text-violet-300">
-                    {c.caseNumber}
-                  </span>
-                  <div className="flex items-center gap-1.5">
-                    {c.access.allowed ? (
-                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-semibold flex items-center gap-1">
-                        <ShieldCheck className="w-3 h-3 text-emerald-400" />
-                        <span>{c.access.role === 'ADMIN' ? 'ADMIN' : (c.access.role === 'COMMAND' ? 'COMMAND' : 'ASSIGNED')}</span>
-                      </span>
-                    ) : (
-                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40 font-semibold flex items-center gap-1">
-                        <Lock className="w-3 h-3 text-rose-400" />
-                        <span>RESTRICTED</span>
-                      </span>
-                    )}
-                    <span className={`text-[10px] font-mono px-2.5 py-0.5 rounded-full uppercase font-semibold ${
-                      c.priority === 'CRITICAL' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40' :
-                      c.priority === 'HIGH' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' :
-                      'bg-slate-800 text-slate-300'
-                    }`}>
-                      {c.priority}
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {paginatedCases.map((c) => (
+              <Link
+                key={c.id}
+                to={`/cases/${c.id}`}
+                className={`obsidian-card p-5 rounded-3xl transition group flex flex-col justify-between hover:scale-[1.01] ${
+                  !c.access.allowed ? 'border-rose-500/30 hover:border-rose-500/50' : ''
+                }`}
+              >
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold font-mono text-violet-400 group-hover:text-violet-300">
+                      {c.caseNumber}
                     </span>
+                    <div className="flex items-center gap-1.5">
+                      {c.access.allowed ? (
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-semibold flex items-center gap-1">
+                          <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                          <span>{c.access.role === 'ADMIN' ? 'ADMIN' : (c.access.role === 'COMMAND' ? 'COMMAND' : 'ASSIGNED')}</span>
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40 font-semibold flex items-center gap-1">
+                          <Lock className="w-3 h-3 text-rose-400" />
+                          <span>RESTRICTED</span>
+                        </span>
+                      )}
+                      <span className={`text-[10px] font-mono px-2.5 py-0.5 rounded-full uppercase font-semibold ${
+                        c.priority === 'CRITICAL' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40' :
+                        c.priority === 'HIGH' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' :
+                        'bg-slate-800 text-slate-300'
+                      }`}>
+                        {c.priority}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h3 className="text-sm font-bold text-white group-hover:text-violet-200 transition">
+                      {c.title}
+                    </h3>
+                    <p className="text-xs text-slate-400 line-clamp-2 mt-1">
+                      {c.description}
+                    </p>
+                  </div>
+
+                  <div className="p-3 rounded-2xl bg-[#121524] border border-white/[0.04] space-y-1 text-[11px] text-slate-400 font-mono">
+                    <div className="flex justify-between">
+                      <span>FIR:</span>
+                      <span className="text-slate-200 font-bold">{c.firNumber}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Agency:</span>
+                      <span className="text-slate-300 truncate max-w-[150px]">{c.investigatingAgency}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Classification:</span>
+                      <span className="text-cyan-400 font-bold">{c.classification}</span>
+                    </div>
                   </div>
                 </div>
 
-                <div>
-                  <h3 className="text-sm font-bold text-white group-hover:text-violet-200 transition">
-                    {c.title}
-                  </h3>
-                  <p className="text-xs text-slate-400 line-clamp-2 mt-1">
-                    {c.description}
-                  </p>
+                <div className="mt-4 pt-3 border-t border-white/[0.06] flex items-center justify-between">
+                  <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-violet-950/80 text-violet-300 border border-violet-500/30 uppercase font-semibold">
+                    {c.status}
+                  </span>
+
+                  {c.legalHold ? (
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-rose-950 text-rose-300 border border-rose-500/40 font-semibold animate-pulse">
+                      LEGAL HOLD
+                    </span>
+                  ) : c.access.allowed ? (
+                    <span className="text-xs text-slate-400 group-hover:text-white flex items-center gap-1 font-medium">
+                      <span>Inspect</span>
+                      <ArrowUpRight className="w-3.5 h-3.5" />
+                    </span>
+                  ) : (
+                    <span className="text-xs text-rose-400/80 group-hover:text-rose-300 flex items-center gap-1 font-medium font-mono">
+                      <Lock className="w-3.5 h-3.5 text-rose-400" />
+                      <span>Locked (ABAC)</span>
+                    </span>
+                  )}
                 </div>
+              </Link>
+            ))}
+          </div>
 
-                <div className="p-3 rounded-2xl bg-[#121524] border border-white/[0.04] space-y-1 text-[11px] text-slate-400 font-mono">
-                  <div className="flex justify-between">
-                    <span>FIR:</span>
-                    <span className="text-slate-200 font-bold">{c.firNumber}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Agency:</span>
-                    <span className="text-slate-300 truncate max-w-[150px]">{c.investigatingAgency}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Classification:</span>
-                    <span className="text-cyan-400 font-bold">{c.classification}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-4 pt-3 border-t border-white/[0.06] flex items-center justify-between">
-                <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-violet-950/80 text-violet-300 border border-violet-500/30 uppercase font-semibold">
-                  {c.status}
-                </span>
-
-                {c.legalHold ? (
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-rose-950 text-rose-300 border border-rose-500/40 font-semibold animate-pulse">
-                    LEGAL HOLD
-                  </span>
-                ) : c.access.allowed ? (
-                  <span className="text-xs text-slate-400 group-hover:text-white flex items-center gap-1 font-medium">
-                    <span>Inspect</span>
-                    <ArrowUpRight className="w-3.5 h-3.5" />
-                  </span>
-                ) : (
-                  <span className="text-xs text-rose-400/80 group-hover:text-rose-300 flex items-center gap-1 font-medium font-mono">
-                    <Lock className="w-3.5 h-3.5 text-rose-400" />
-                    <span>Locked (ABAC)</span>
-                  </span>
-                )}
-              </div>
-            </Link>
-          ))}
+          <Pagination
+            currentPage={currentPage}
+            totalItems={filteredCases.length}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={setPageSize}
+            pageSizeOptions={[6, 12, 24]}
+            itemLabel="dossiers"
+          />
         </div>
       )}
 
       {/* Register Case Modal */}
-      {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-150">
+      {showCreateModal && createPortal(
+        <div className="fixed inset-0 z-[99999] w-screen h-screen min-h-screen flex items-center justify-center bg-black/95 backdrop-blur-2xl p-4 animate-in fade-in duration-150">
           <div className="obsidian-card w-full max-w-lg p-6 rounded-3xl shadow-2xl space-y-4 border border-white/10">
             <div className="flex items-center justify-between border-b border-white/[0.08] pb-3">
               <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
@@ -501,7 +581,7 @@ export const CasesListPage = () => {
               </h3>
               <button
                 onClick={() => setShowCreateModal(false)}
-                className="text-slate-400 hover:text-white p-1"
+                className="text-slate-400 hover:text-white p-1 cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -514,38 +594,51 @@ export const CasesListPage = () => {
               </div>
             )}
 
-            <form onSubmit={handleCreateCase} className="space-y-3">
+            <form onSubmit={handleCreateCase} className="space-y-3.5 text-xs">
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">Case Title</label>
+                <label className="block text-slate-400 mb-1 font-semibold">Case Title / Subject</label>
                 <input
                   type="text"
                   required
+                  placeholder="e.g. State vs Cyber Syndicate Alpha"
                   value={formData.title}
                   onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                  placeholder="e.g. State vs Cyber Syndicate Alpha"
-                  className="w-full px-3.5 py-2 bg-[#121524] border border-white/[0.08] rounded-xl text-xs text-white focus:outline-none focus:border-violet-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">FIR Number</label>
-                <input
-                  type="text"
-                  required
-                  value={formData.firNumber}
-                  onChange={(e) => setFormData({ ...formData, firNumber: e.target.value })}
-                  placeholder="e.g. FIR-2026-9812"
-                  className="w-full px-3.5 py-2 bg-[#121524] border border-white/[0.08] rounded-xl text-xs text-white focus:outline-none focus:border-violet-500"
+                  className="w-full bg-[#13182E] border border-white/[0.08] rounded-xl px-3.5 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-violet-500"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">Priority</label>
+                  <label className="block text-slate-400 mb-1 font-semibold">FIR Reference Number</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="FIR-2026-0891"
+                    value={formData.firNumber}
+                    onChange={(e) => setFormData({ ...formData, firNumber: e.target.value })}
+                    className="w-full bg-[#13182E] border border-white/[0.08] rounded-xl px-3.5 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-violet-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-400 mb-1 font-semibold">Investigating Agency</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Central Crime Branch (CCB)"
+                    value={formData.investigatingAgency}
+                    onChange={(e) => setFormData({ ...formData, investigatingAgency: e.target.value })}
+                    className="w-full bg-[#13182E] border border-white/[0.08] rounded-xl px-3.5 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-violet-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-400 mb-1 font-semibold">Priority Level</label>
                   <select
                     value={formData.priority}
                     onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
-                    className="w-full px-3 py-2 bg-[#121524] border border-white/[0.08] rounded-xl text-xs text-white focus:outline-none focus:border-violet-500"
+                    className="w-full bg-[#13182E] border border-white/[0.08] rounded-xl px-3.5 py-2 text-white focus:outline-none focus:border-violet-500 cursor-pointer"
                   >
                     <option value="CRITICAL">CRITICAL</option>
                     <option value="HIGH">HIGH</option>
@@ -555,50 +648,59 @@ export const CasesListPage = () => {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">Classification</label>
+                  <label className="block text-slate-400 mb-1 font-semibold">Security Clearance Level (ABAC)</label>
                   <select
                     value={formData.classification}
                     onChange={(e) => setFormData({ ...formData, classification: e.target.value })}
-                    className="w-full px-3 py-2 bg-[#121524] border border-white/[0.08] rounded-xl text-xs text-white focus:outline-none focus:border-violet-500"
+                    className="w-full bg-[#13182E] border border-white/[0.08] rounded-xl px-3.5 py-2 text-white focus:outline-none focus:border-violet-500 cursor-pointer"
                   >
-                    <option value="RESTRICTED">RESTRICTED</option>
-                    <option value="CONFIDENTIAL">CONFIDENTIAL</option>
-                    <option value="SECRET">SECRET</option>
-                    <option value="TOP_SECRET">TOP_SECRET</option>
+                    {[
+                      { value: 'PUBLIC', label: 'PUBLIC (Court / Open Access)' },
+                      { value: 'RESTRICTED', label: 'RESTRICTED' },
+                      { value: 'CONFIDENTIAL', label: 'CONFIDENTIAL' },
+                      { value: 'SECRET', label: 'SECRET' },
+                      { value: 'TOP_SECRET', label: 'TOP_SECRET' },
+                    ]
+                      .filter((opt) => canClearanceAccess(user?.clearance, opt.value))
+                      .map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
                   </select>
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">Summary Description</label>
+                <label className="block text-slate-400 mb-1 font-semibold">Case Summary / Initial Brief</label>
                 <textarea
                   rows="3"
+                  required
+                  placeholder="Brief description of alleged digital offenses, forensic scope, and primary targets..."
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  placeholder="Enter initial investigation brief..."
-                  className="w-full px-3.5 py-2 bg-[#121524] border border-white/[0.08] rounded-xl text-xs text-white focus:outline-none focus:border-violet-500"
+                  className="w-full bg-[#13182E] border border-white/[0.08] rounded-xl px-3.5 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-violet-500 resize-none"
                 />
               </div>
 
-              <div className="pt-2 flex items-center justify-end gap-2">
+              <div className="flex justify-end gap-3 pt-3 border-t border-white/[0.08]">
                 <button
                   type="button"
                   onClick={() => setShowCreateModal(false)}
-                  className="px-4 py-2 rounded-xl bg-[#181D33] text-slate-300 text-xs font-medium hover:bg-[#202744]"
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={creating}
-                  className="px-5 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold shadow-lg shadow-violet-600/40"
+                  className="px-5 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold shadow-lg shadow-violet-600/40 cursor-pointer disabled:opacity-50"
                 >
                   {creating ? 'Registering...' : 'Register Dossier'}
                 </button>
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

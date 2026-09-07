@@ -59,10 +59,6 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ username, password }),
   }),
-  demoLogin: (username) => request('/auth/demo-login', {
-    method: 'POST',
-    body: JSON.stringify({ username }),
-  }),
   verifyTotp: (preAuthToken, code) => request('/auth/mfa/verify', {
     method: 'POST',
     body: JSON.stringify({ preAuthToken, code }),
@@ -164,6 +160,19 @@ export const api = {
     body: JSON.stringify(data),
   }),
   getCourtHearings: (caseId) => request(`/court/cases/${caseId}/hearings`),
+  getChargeSheet: (caseId) => request(`/cases/${caseId}/charge-sheet`),
+  submitChargeSheet: (caseId, documentId) => request(`/cases/${caseId}/charge-sheet`, {
+    method: 'POST',
+    body: JSON.stringify({ documentId }),
+  }),
+  reviewChargeSheet: (id, data) => request(`/charge-sheets/${id}/senior-review`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
+  prosecutorSignChargeSheet: (id, data) => request(`/charge-sheets/${id}/prosecutor-sign`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
 
   // Audit Ledger & Security Alerts
   getAuditLogs: () => request('/audit/logs'),
@@ -174,6 +183,20 @@ export const api = {
     body: JSON.stringify({ notes }),
   }),
 
+  // Quarantine Repository
+  getQuarantinedItems: () => request('/quarantine'),
+  releaseQuarantineItem: (id, notes) => request(`/quarantine/${id}/release`, {
+    method: 'POST',
+    body: JSON.stringify({ notes }),
+  }),
+  purgeQuarantineItem: (id) => request(`/quarantine/${id}`, {
+    method: 'DELETE',
+  }),
+
+  // Approvals Matrix
+  getApprovals: () => request('/approvals'),
+  getApprovalsForEntity: (entityId) => request(`/approvals/entity/${entityId}`),
+
   // Retention & Disposal
   getRetentionPolicies: () => request('/retention/policies'),
   createRetentionPolicy: (data) => request('/retention/policies', {
@@ -182,6 +205,10 @@ export const api = {
   }),
   getDisposalRecords: () => request('/retention/disposals'),
   executeDisposal: (caseId, data) => request(`/retention/disposals/${caseId}`, {
+    method: 'POST',
+    body: JSON.stringify(data || {}),
+  }),
+  archiveCase: (caseId, data) => request(`/retention/cases/${caseId}/archive`, {
     method: 'POST',
     body: JSON.stringify(data || {}),
   }),
@@ -198,6 +225,10 @@ export const api = {
   }),
   getRoles: () => request('/admin/roles'),
   getPermissions: () => request('/admin/permissions'),
+  updateRolePermissions: (roleId, permissionIds) => request(`/admin/roles/${roleId}/permissions`, {
+    method: 'PUT',
+    body: JSON.stringify(permissionIds),
+  }),
 
   // Search
   search: (query) => request(`/search?q=${encodeURIComponent(query)}`),

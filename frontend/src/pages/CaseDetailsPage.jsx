@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { api } from '../services/api';
 import { useAuth, DEMO_ACCOUNTS } from '../context/AuthContext';
@@ -35,9 +36,21 @@ import {
   UserCheck,
   Search,
   User as UserIcon,
-  ShieldAlert
+  ShieldAlert,
+  Archive,
+  Key
 } from 'lucide-react';
-import { checkCaseAccess, getStoredTeamAssignments as getStoredAbacAssignments } from '../services/abac';
+import { checkCaseAccess, canClearanceAccess, getStoredTeamAssignments as getStoredAbacAssignments } from '../services/abac';
+import { 
+  logDocumentDownload, 
+  logDocumentUpload, 
+  logEvidenceRegistered, 
+  logCaseAssignment, 
+  logCaseStatusChange, 
+  logLegalHold,
+  logCaseArchived,
+  logWormLockApplied
+} from '../services/auditLogger';
 
 const FALLBACK_CASE_DETAILS = {
   id: '1',
@@ -101,6 +114,18 @@ const FALLBACK_CASES = [
     classification: 'CONFIDENTIAL',
     status: 'REGISTERED',
     legalHold: false,
+  },
+  {
+    id: '4',
+    caseNumber: 'CASE-2026-004',
+    title: 'State vs Metro Automated Transit & Toll Registry Dispute',
+    description: 'Public judicial inquiry into transit ticketing anomaly and automated municipal toll violation hearings.',
+    firNumber: 'FIR-2026-0105',
+    investigatingAgency: 'Metropolitan Public Traffic & Court Division',
+    priority: 'LOW',
+    classification: 'PUBLIC',
+    status: 'HEARING_SCHEDULED',
+    legalHold: false,
   }
 ];
 
@@ -162,6 +187,15 @@ export const CaseDetailsPage = () => {
   const [selectedRoleInCase, setSelectedRoleInCase] = useState('INVESTIGATOR');
   const [assigning, setAssigning] = useState(false);
 
+  // WORM Archival state
+  const [showArchiveModal, setShowArchiveModal] = useState(false);
+  const [archiveForm, setArchiveForm] = useState({
+    archiveReason: 'Statutory long-term evidentiary preservation',
+    retentionYears: 10,
+    wormMode: 'COMPLIANCE'
+  });
+  const [archiving, setArchiving] = useState(false);
+
   useEffect(() => {
     loadAllCaseData();
   }, [caseId, user]);
@@ -189,27 +223,9 @@ export const CaseDetailsPage = () => {
         const details = await api.getCaseDetails(caseId);
         if (details && (details.caseNumber || details.title)) {
           setCaseData(details);
-          setTeamList(details.teamAssignments || details.assignments || [
-            {
-              id: `asgn-${Date.now()}`,
-              userId: user?.userId || 'usr-1',
-              username: details.createdByUsername || user?.username || 'officer',
-              fullName: user?.fullName || 'Assigned Officer',
-              roleInCase: 'LEAD_INVESTIGATOR',
-              assignedAt: details.registrationDate || new Date().toISOString(),
-              clearance: user?.clearance || details.classification || 'RESTRICTED'
-            }
-          ]);
-          setHistoryList(details.statusHistory || [
-            {
-              id: `sh-${Date.now()}`,
-              fromStatus: 'NONE',
-              toStatus: details.status || 'REGISTERED',
-              reason: 'Initial case dossier registered in cryptographic vault',
-              changedByUsername: details.createdByUsername || user?.username || 'officer',
-              changedAt: details.registrationDate || new Date().toISOString()
-            }
-          ]);
+          const asgns = details.assignments || details.teamAssignments || [];
+          setTeamList(asgns);
+          setHistoryList(details.statusHistory || []);
           const [docs, ev] = await Promise.all([
             api.getCaseDocuments(caseId).catch(() => []),
             api.getCaseEvidence(caseId).catch(() => []),
@@ -386,6 +402,12 @@ export const CaseDetailsPage = () => {
         reason: statusReason,
       });
       saveStatusHistory(newHistory);
+      logCaseStatusChange({
+        caseNumber: caseData?.caseNumber || 'CASE-2026-001',
+        fromStatus: caseData?.status || 'REGISTERED',
+        toStatus: targetStatus,
+        reason: statusReason
+      });
       setShowStatusModal(false);
       setStatusReason('');
       loadAllCaseData();
@@ -393,6 +415,12 @@ export const CaseDetailsPage = () => {
       setCaseData(prev => ({ ...prev, status: targetStatus }));
       setHistoryList(prev => [newHistory, ...prev]);
       saveStatusHistory(newHistory);
+      logCaseStatusChange({
+        caseNumber: caseData?.caseNumber || 'CASE-2026-001',
+        fromStatus: caseData?.status || 'REGISTERED',
+        toStatus: targetStatus,
+        reason: statusReason
+      });
       setShowStatusModal(false);
       setStatusReason('');
     } finally {
@@ -400,17 +428,83 @@ export const CaseDetailsPage = () => {
     }
   };
 
+  const handleArchiveCase = async (e) => {
+    e.preventDefault();
+    if (caseData?.legalHold) {
+      alert('Cannot archive case while Legal Hold is active. Please lift legal hold first.');
+      return;
+    }
+    setArchiving(true);
+    const targetCaseId = caseData?.id || caseId;
+    try {
+      const res = await api.archiveCase(targetCaseId, archiveForm);
+      logCaseArchived({
+        caseNumber: caseData?.caseNumber || 'CASE-2026-001',
+        reason: archiveForm.archiveReason,
+        retentionYears: archiveForm.retentionYears,
+        wormToken: res?.wormComplianceToken,
+        wormLockUntil: res?.wormPreservedUntil
+      });
+      setShowArchiveModal(false);
+      loadAllCaseData();
+    } catch (err) {
+      // Optimistic local update for mock/demo
+      const now = new Date();
+      const expDate = new Date(now.setFullYear(now.getFullYear() + Number(archiveForm.retentionYears))).toISOString();
+      const pseudoToken = `WORM-COMPLIANCE-SEAL-${Date.now().toString(16).toUpperCase()}`;
+      setCaseData(prev => ({
+        ...prev,
+        status: 'ARCHIVED',
+        wormPreserved: true,
+        wormPreservedUntil: expDate,
+        wormComplianceToken: pseudoToken,
+        archiveReason: archiveForm.archiveReason,
+        archivedAt: new Date().toISOString(),
+        archivedBy: user?.username || 'senior_officer'
+      }));
+      setDocuments(prev => prev.map(d => ({
+        ...d,
+        wormLocked: true,
+        wormLockUntil: expDate,
+        wormRetentionMode: archiveForm.wormMode,
+        wormComplianceHash: `WORM-SHA256-${Date.now().toString(16)}`
+      })));
+      logCaseArchived({
+        caseNumber: caseData?.caseNumber || 'CASE-2026-001',
+        reason: archiveForm.archiveReason,
+        retentionYears: archiveForm.retentionYears,
+        wormToken: pseudoToken,
+        wormLockUntil: expDate
+      });
+      setShowArchiveModal(false);
+    } finally {
+      setArchiving(false);
+    }
+  };
+
   const toggleLegalHold = async () => {
     setLegalHoldLoading(true);
+    const action = caseData?.legalHold ? 'LIFTED' : 'PLACED';
+    const reason = caseData?.legalHold ? 'Preservation order lifted by authorized supervisor' : 'Litigation preservation order issued by Senior Officer';
     try {
       if (caseData?.legalHold) {
         await api.liftLegalHold(caseId);
       } else {
-        await api.placeLegalHold(caseId, 'Litigation preservation order issued by Senior Officer');
+        await api.placeLegalHold(caseId, reason);
       }
+      logLegalHold({
+        caseNumber: caseData?.caseNumber || 'CASE-2026-001',
+        action,
+        reason
+      });
       loadAllCaseData();
     } catch (err) {
       setCaseData(prev => ({ ...prev, legalHold: !prev?.legalHold }));
+      logLegalHold({
+        caseNumber: caseData?.caseNumber || 'CASE-2026-001',
+        action,
+        reason
+      });
     } finally {
       setLegalHoldLoading(false);
     }
@@ -446,6 +540,11 @@ export const CaseDetailsPage = () => {
 
       saveTeamAssignment(newAssignment);
       setTeamList(prev => [...prev, newAssignment]);
+      logCaseAssignment({
+        caseNumber: caseData?.caseNumber || 'CASE-2026-001',
+        officerName: `${officerFullName} (@${officerUid})`,
+        roleInCase: selectedRoleInCase
+      });
       setShowAssignModal(false);
       setOfficerSearch('');
     } catch (err) {
@@ -469,7 +568,21 @@ export const CaseDetailsPage = () => {
       storageLocation: evidenceForm.storageLocation,
       physicalCondition: evidenceForm.physicalCondition,
       status: 'IN_CUSTODY',
-      currentCustodian: user?.fullName || 'Senior Officer',
+      currentCustodian: user?.fullName || user?.username || 'Senior Officer',
+      currentCustodianUsername: user?.username,
+      currentCustodianId: user?.id,
+      submittedBy: user?.username,
+      submittedByUsername: user?.username,
+      submittedById: user?.id,
+      submittedByName: user?.fullName || user?.username,
+      collectedBy: {
+        id: user?.id,
+        username: user?.username,
+        fullName: user?.fullName || user?.username
+      },
+      collectedByUsername: user?.username,
+      collectedByName: user?.fullName || user?.username,
+      collectedById: user?.id,
       registrationDate: new Date().toISOString()
     };
     try {
@@ -478,13 +591,25 @@ export const CaseDetailsPage = () => {
         registered = await api.registerEvidence(caseId, evidenceForm);
       } catch (_) {}
       
-      const finalEv = registered || newEvItem;
+      const finalEv = registered ? { ...newEvItem, ...registered } : newEvItem;
       saveEvidence(finalEv);
       setEvidenceList(prev => [...prev, finalEv]);
+      logEvidenceRegistered({
+        barcode: newEvItem.barcode,
+        description: evidenceForm.description,
+        storageLocation: evidenceForm.storageLocation,
+        caseNumber: caseData?.caseNumber || 'CASE-2026-001'
+      });
       setShowEvidenceModal(false);
     } catch (err) {
       saveEvidence(newEvItem);
       setEvidenceList(prev => [...prev, newEvItem]);
+      logEvidenceRegistered({
+        barcode: newEvItem.barcode,
+        description: evidenceForm.description,
+        storageLocation: evidenceForm.storageLocation,
+        caseNumber: caseData?.caseNumber || 'CASE-2026-001'
+      });
       setShowEvidenceModal(false);
     } finally {
       setRegisteringEvidence(false);
@@ -493,6 +618,21 @@ export const CaseDetailsPage = () => {
 
   const handleDownloadDocument = async (doc) => {
     try {
+      const isAuthorized = canClearanceAccess(user?.clearance, doc.classification);
+      if (!isAuthorized) {
+        alert(`ACCESS DENIED: Clearance Violation\n\nThis document is classified as "${doc.classification}". Your security clearance is "${user?.clearance || 'PUBLIC'}".\n\nOnly personnel with ${doc.classification} or higher clearance are authorized to download this artifact.`);
+        return;
+      }
+
+      // Record download audit event into immutable ledger
+      logDocumentDownload({
+        docTitle: doc.title || doc.originalFilename,
+        docId: doc.id,
+        caseNumber: doc.caseNumber || caseData?.caseNumber || 'CASE-2026-001',
+        sha256Hash: doc.sha256Hash,
+        fileSize: doc.fileSize
+      });
+
       // 1. If stored data URL/blob exists in client storage for uploaded file (images, PDFs, binary, etc.)
       if (doc.fileDataUrl) {
         const a = document.createElement('a');
@@ -623,11 +763,31 @@ modification, tamper event, or parity mismatch was detected during verification.
       const finalDoc = resDoc ? { ...resDoc, fileDataUrl } : newDocItem;
       saveVaultDoc(finalDoc);
       setDocuments(prev => [finalDoc, ...prev]);
+
+      logDocumentUpload({
+        docTitle: docTitle || uploadFile.name,
+        docId: finalDoc.id,
+        caseNumber: caseData?.caseNumber || 'CASE-2026-001',
+        classification: docClassification,
+        fileSize: uploadFile.size,
+        sha256Hash: finalDoc.sha256Hash
+      });
+
       setUploadFile(null);
       setDocTitle('');
     } catch (err) {
       saveVaultDoc(newDocItem);
       setDocuments(prev => [newDocItem, ...prev]);
+
+      logDocumentUpload({
+        docTitle: docTitle || uploadFile.name,
+        docId: newDocItem.id,
+        caseNumber: caseData?.caseNumber || 'CASE-2026-001',
+        classification: docClassification,
+        fileSize: uploadFile.size,
+        sha256Hash: newDocItem.sha256Hash
+      });
+
       setUploadFile(null);
       setDocTitle('');
     } finally {
@@ -737,6 +897,11 @@ modification, tamper event, or parity mismatch was detected during verification.
   }
 
   const canAssignTeam = hasRole('SENIOR_OFFICER') || hasRole('ADMIN');
+  const isCustodyEligible = hasRole('INVESTIGATOR') || hasRole('EVIDENCE_CUSTODIAN') || hasRole('FORENSIC_OFFICER') || hasRole('SENIOR_OFFICER') || hasRole('ADMIN');
+  const isAuditor = hasRole('AUDITOR');
+  const isClosedOrArchived = caseData?.status === 'CLOSED' || caseData?.status === 'ARCHIVED';
+  const canRegisterEvidence = isCustodyEligible && !isClosedOrArchived;
+  const canUploadDocuments = !isAuditor && !isClosedOrArchived;
 
   return (
     <div className="space-y-6 select-none max-w-7xl mx-auto">
@@ -754,9 +919,19 @@ modification, tamper event, or parity mismatch was detected during verification.
               <span className="text-xs font-mono px-2.5 py-0.5 rounded-full uppercase font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
                 {caseData.classification}
               </span>
-              <span className="text-xs font-mono px-2.5 py-0.5 rounded-full uppercase font-bold bg-violet-500/20 text-violet-300 border border-violet-500/30">
+              <span className={`text-xs font-mono px-2.5 py-0.5 rounded-full uppercase font-bold border ${
+                caseData.status === 'ARCHIVED' 
+                  ? 'bg-amber-950/80 text-amber-300 border-amber-500/50' 
+                  : 'bg-violet-500/20 text-violet-300 border-violet-500/30'
+              }`}>
                 {caseData.status}
               </span>
+              {(caseData.wormPreserved || caseData.status === 'ARCHIVED') && (
+                <span className="text-xs font-mono px-2.5 py-0.5 rounded-full uppercase font-bold bg-amber-500/20 text-amber-300 border border-amber-500/50 flex items-center gap-1.5 shadow-sm">
+                  <Archive className="w-3.5 h-3.5 text-amber-400" />
+                  <span>WORM IMMUTABLE VAULT SEALED</span>
+                </span>
+              )}
               {caseData.legalHold && (
                 <span className="text-xs font-mono px-2.5 py-0.5 rounded-full uppercase font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40 animate-pulse">
                   LEGAL HOLD ACTIVE
@@ -772,10 +947,26 @@ modification, tamper event, or parity mismatch was detected during verification.
             <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">{caseData.title}</h1>
             <p className="text-xs text-slate-400">
               Agency: <span className="text-slate-200">{caseData.investigatingAgency}</span> • Registered by: <span className="text-slate-200 font-mono">@{caseData.createdByUsername || 'OFFICER'}</span>
+              {caseData.wormPreservedUntil && (
+                <span className="ml-2 text-amber-400 font-mono">
+                  • WORM Retention Expiry: {new Date(caseData.wormPreservedUntil).toLocaleDateString()}
+                </span>
+              )}
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5">
+            {/* Archive to WORM Vault Action - Available on CLOSED cases for Senior Officer & Admin */}
+            {caseData.status === 'CLOSED' && (hasRole('SENIOR_OFFICER') || hasRole('ADMIN')) && (
+              <button
+                onClick={() => setShowArchiveModal(true)}
+                className="px-4 py-2 rounded-full bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white text-xs font-semibold transition shadow-lg shadow-amber-600/30 border border-amber-400/40 flex items-center gap-1.5"
+              >
+                <Archive className="w-3.5 h-3.5" />
+                <span>Archive to WORM Vault</span>
+              </button>
+            )}
+
             {/* Status Transition Action - Restricted to Senior Officer & Admin */}
             {(hasRole('SENIOR_OFFICER') || hasRole('ADMIN')) && (
               <button
@@ -810,6 +1001,7 @@ modification, tamper event, or parity mismatch was detected during verification.
             { id: 'evidence', label: `Evidence Locker (${evidenceList.length})`, icon: Package },
             { id: 'documents', label: `Vault Documents (${documents.length})`, icon: Lock },
             { id: 'team', label: `Assigned Team (${teamList.length})`, icon: Users },
+            { id: 'prosecution', label: 'Charge Sheet & Prosecution', icon: Scale },
             { id: 'history', label: `Audit Timeline (${historyList.length})`, icon: Clock }
           ].map((tab) => {
             const Icon = tab.icon;
@@ -887,16 +1079,27 @@ modification, tamper event, or parity mismatch was detected during verification.
       {activeTab === 'evidence' && (
         <div className="space-y-4">
           <div className="flex justify-between items-center">
-            <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-              Registered Evidence Artifacts ({evidenceList.length})
-            </h3>
-            <button
-              onClick={() => setShowEvidenceModal(true)}
-              className="px-4 py-2 rounded-full bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold transition flex items-center gap-1.5 shadow-lg shadow-violet-600/30"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Register Evidence</span>
-            </button>
+            <div>
+              <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+                Registered Evidence Artifacts ({evidenceList.length})
+              </h3>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Physical and digital evidentiary assets recorded in custody ledger
+              </p>
+            </div>
+            {canRegisterEvidence ? (
+              <button
+                onClick={() => setShowEvidenceModal(true)}
+                className="px-4 py-2 rounded-full bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold transition flex items-center gap-1.5 shadow-lg shadow-violet-600/30"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Register Evidence</span>
+              </button>
+            ) : (
+              <span className="text-[10px] font-mono px-3 py-1 rounded-full bg-slate-800 text-slate-400 border border-slate-700">
+                {isClosedOrArchived ? '🔒 Read-Only (Case Finalized)' : '🔒 Evidence Intake Restricted to Custodial Roles'}
+              </span>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -930,34 +1133,75 @@ modification, tamper event, or parity mismatch was detected during verification.
       {/* Tab 3: Vault Documents */}
       {activeTab === 'documents' && (
         <div className="space-y-4">
-          <div className="obsidian-card p-5 rounded-3xl space-y-3">
-            <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-              Upload Sealed Document Artifact
-            </h3>
-            <form onSubmit={handleUploadDocument} className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <input
-                type="text"
-                required
-                value={docTitle}
-                onChange={(e) => setDocTitle(e.target.value)}
-                placeholder="Document Title (e.g. Investigation Report)"
-                className="px-3.5 py-2 bg-[#121524] border border-white/[0.08] rounded-xl text-xs text-white focus:outline-none focus:border-violet-500"
-              />
-              <input
-                type="file"
-                required
-                onChange={(e) => setUploadFile(e.target.files[0])}
-                className="px-3.5 py-1.5 bg-[#121524] border border-white/[0.08] rounded-xl text-xs text-slate-300 file:mr-2 file:py-1 file:px-2 file:rounded-lg file:border-0 file:text-xs file:bg-violet-600 file:text-white"
-              />
-              <button
-                type="submit"
-                disabled={uploading}
-                className="py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold transition shadow-lg shadow-violet-600/30"
-              >
-                {uploading ? 'Encrypting...' : 'Upload & Seal'}
-              </button>
-            </form>
-          </div>
+          {canUploadDocuments ? (
+            <div className="obsidian-card p-5 rounded-3xl space-y-3">
+              <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+                Upload Sealed Document Artifact
+              </h3>
+              <form onSubmit={handleUploadDocument} className="grid grid-cols-1 md:grid-cols-12 gap-3">
+                <div className="md:col-span-4">
+                  <input
+                    type="text"
+                    required
+                    value={docTitle}
+                    onChange={(e) => setDocTitle(e.target.value)}
+                    placeholder="Document Title (e.g. Investigation Report)"
+                    className="w-full px-3.5 py-2 bg-[#121524] border border-white/[0.08] rounded-xl text-xs text-white focus:outline-none focus:border-violet-500"
+                  />
+                </div>
+                <div className="md:col-span-3">
+                  <select
+                    value={docType}
+                    onChange={(e) => setDocType(e.target.value)}
+                    className="w-full px-3 py-2 bg-[#121524] border border-white/[0.08] rounded-xl text-xs text-white focus:outline-none focus:border-violet-500"
+                  >
+                    <option value="POLICE_REPORT">Police Report</option>
+                    <option value="FORENSIC_REPORT">Forensic Report</option>
+                    <option value="SEIZURE_MEMO">Seizure Memo</option>
+                    <option value="EXPERT_OPINION">Expert Opinion</option>
+                    <option value="WITNESS_STATEMENT">Witness Statement</option>
+                  </select>
+                </div>
+                <div className="md:col-span-2">
+                  <select
+                    value={docClassification}
+                    onChange={(e) => setDocClassification(e.target.value)}
+                    className="w-full px-3 py-2 bg-[#121524] border border-white/[0.08] rounded-xl text-xs text-white focus:outline-none focus:border-violet-500"
+                  >
+                    <option value="PUBLIC">PUBLIC</option>
+                    <option value="RESTRICTED">RESTRICTED</option>
+                    <option value="CONFIDENTIAL">CONFIDENTIAL</option>
+                    <option value="SECRET">SECRET</option>
+                    <option value="TOP_SECRET">TOP_SECRET</option>
+                  </select>
+                </div>
+                <div className="md:col-span-3 flex items-center gap-2">
+                  <input
+                    type="file"
+                    required
+                    onChange={(e) => setUploadFile(e.target.files[0])}
+                    className="w-full px-2 py-1.5 bg-[#121524] border border-white/[0.08] rounded-xl text-xs text-slate-300 file:mr-2 file:py-0.5 file:px-2 file:rounded-lg file:border-0 file:text-xs file:bg-violet-600 file:text-white"
+                  />
+                  <button
+                    type="submit"
+                    disabled={uploading}
+                    className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold transition shadow-lg shadow-violet-600/30 whitespace-nowrap"
+                  >
+                    {uploading ? 'Sealing...' : 'Upload'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          ) : (
+            <div className="obsidian-card p-4 rounded-2xl border border-slate-700 bg-slate-900/60 flex items-center gap-3 text-xs font-mono text-slate-300">
+              <Lock className="w-4 h-4 text-amber-400 flex-shrink-0" />
+              <span>
+                {isAuditor 
+                  ? 'Compliance Oversight Mode: As an Auditor, access is strictly read-only. Document uploads and case modifications are blocked by policy.'
+                  : 'Case Dossier Locked: Case is in CLOSED / ARCHIVED status. Document uploads are disabled.'}
+              </span>
+            </div>
+          )}
 
           <div className="space-y-3">
             {documents.length === 0 ? (
@@ -966,7 +1210,10 @@ modification, tamper event, or parity mismatch was detected during verification.
                 <p className="text-xs text-slate-400">No documents sealed in this dossier yet. Upload a document above.</p>
               </div>
             ) : (
-              documents.map((doc) => (
+            documents.map((doc) => {
+              const isAuthorized = canClearanceAccess(user?.clearance, doc.classification);
+
+              return (
                 <div key={doc.id} className="obsidian-card p-4 rounded-3xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 border border-white/[0.08] hover:border-violet-500/30 transition">
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -974,6 +1221,27 @@ modification, tamper event, or parity mismatch was detected during verification.
                       <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-300 border border-violet-500/30">
                         {doc.documentType}
                       </span>
+                      <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full uppercase font-bold border ${
+                        doc.classification === 'TOP_SECRET' ? 'bg-rose-950 text-rose-300 border-rose-800' :
+                        doc.classification === 'SECRET' ? 'bg-amber-950 text-amber-300 border-amber-800' :
+                        doc.classification === 'CONFIDENTIAL' ? 'bg-blue-950 text-blue-300 border-blue-800' :
+                        doc.classification === 'PUBLIC' ? 'bg-emerald-950 text-emerald-300 border-emerald-800' :
+                        'bg-slate-800 text-slate-300 border-slate-700'
+                      }`}>
+                        {doc.classification}
+                      </span>
+                      {(doc.wormLocked || caseData.wormPreserved || caseData.status === 'ARCHIVED') && (
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-full uppercase font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1">
+                          <Archive className="w-2.5 h-2.5 text-amber-400" />
+                          WORM OBJECT LOCKED [{doc.wormRetentionMode || 'COMPLIANCE'}]
+                        </span>
+                      )}
+                      {!isAuthorized && (
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40 flex items-center gap-1 font-bold">
+                          <Lock className="w-2.5 h-2.5" />
+                          CLEARANCE RESTRICTED
+                        </span>
+                      )}
                       {doc.originalFilename && (
                         <span className="text-[10px] font-mono text-slate-400">
                           ({doc.originalFilename}{doc.fileSize ? ` • ${(doc.fileSize / 1024).toFixed(1)} KB` : ''})
@@ -981,24 +1249,52 @@ modification, tamper event, or parity mismatch was detected during verification.
                       )}
                     </div>
                     <p className="text-[10px] font-mono text-slate-500 truncate max-w-lg">
-                      Verification Seal: <span className="text-cyan-400">{doc.sha256Hash}</span>
+                      {isAuthorized ? (
+                        <>
+                          Verification Seal: <span className="text-cyan-400">{doc.sha256Hash}</span>
+                          {doc.wormLockUntil && (
+                            <span className="text-amber-400/90 ml-2">
+                              • Immutable Lock Expiry: {new Date(doc.wormLockUntil).toLocaleDateString()}
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <span className="text-rose-400/80 italic flex items-center gap-1">
+                          <Lock className="w-2.5 h-2.5" />
+                          Seal & File Content Masked — Requires {doc.classification} Clearance
+                        </span>
+                      )}
                     </p>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
-                    <span className="text-[10px] font-mono px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold">
-                      DIGITALLY SEALED
-                    </span>
-                    <button
-                      onClick={() => handleDownloadDocument(doc)}
-                      className="px-3 py-1.5 rounded-xl bg-violet-600/30 hover:bg-violet-600 text-violet-200 hover:text-white border border-violet-500/40 transition flex items-center gap-1.5 text-xs font-semibold shadow-sm"
-                      title="Download Sealed Document"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      <span>Download</span>
-                    </button>
+                    {isAuthorized ? (
+                      <>
+                        <span className="text-[10px] font-mono px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold">
+                          DIGITALLY SEALED
+                        </span>
+                        <button
+                          onClick={() => handleDownloadDocument(doc)}
+                          className="px-3 py-1.5 rounded-xl bg-violet-600/30 hover:bg-violet-600 text-violet-200 hover:text-white border border-violet-500/40 transition flex items-center gap-1.5 text-xs font-semibold shadow-sm cursor-pointer"
+                          title="Download Sealed Document"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          <span>Download</span>
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        disabled
+                        className="px-3 py-1.5 rounded-xl bg-slate-800/80 text-slate-500 border border-slate-700/60 text-xs font-semibold flex items-center gap-1.5 cursor-not-allowed opacity-75"
+                        title={`Access Blocked: Your clearance (${user?.clearance || 'PUBLIC'}) is insufficient for ${doc.classification} documents.`}
+                      >
+                        <Lock className="w-3.5 h-3.5 text-rose-400" />
+                        <span>Locked</span>
+                      </button>
+                    )}
                   </div>
                 </div>
-              ))
+              );
+            })
             )}
           </div>
         </div>
@@ -1075,6 +1371,67 @@ modification, tamper event, or parity mismatch was detected during verification.
         </div>
       )}
 
+      {/* Tab: Charge Sheet & Prosecution Workflow */}
+      {activeTab === 'prosecution' && (
+        <div className="space-y-4 font-mono">
+          <div className="obsidian-card p-6 rounded-3xl space-y-5 border border-white/[0.08]">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/[0.06] pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+                  <Scale className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+                    Prosecution Charge Sheet & Multi-Tier Approvals
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Formal charge sheet dossier for {caseData.caseNumber}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className={`text-xs px-3 py-1 rounded-full font-bold uppercase border ${
+                  caseData.status === 'SIGNED' || caseData.status === 'FILED_IN_COURT' || caseData.status === 'COURT_PROCEEDINGS'
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                    : caseData.status === 'CHARGE_SHEET_PENDING'
+                    ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40'
+                    : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                }`}>
+                  {caseData.status}
+                </span>
+                <button
+                  onClick={() => navigate('/court')}
+                  className="px-4 py-1.5 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md shadow-indigo-600/30 transition flex items-center gap-1.5"
+                >
+                  <Gavel className="w-3.5 h-3.5" />
+                  <span>Open Court Workspace</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+              <div className="p-4 rounded-2xl bg-[#0E111C] border border-white/[0.04] space-y-2">
+                <span className="text-[10px] text-slate-500 uppercase font-bold block">Statutory Charges</span>
+                <p className="text-slate-200">Information Technology Act 2000 (Sec 43, 66) • IPC (Sec 379, 420, 120B)</p>
+                <div className="text-[11px] text-slate-400 pt-1">
+                  <span className="text-violet-400 font-bold">Investigation Agency:</span> {caseData.investigatingAgency}
+                </div>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-[#0E111C] border border-white/[0.04] space-y-2">
+                <span className="text-[10px] text-slate-500 uppercase font-bold block">Digital Evidence Admissibility</span>
+                <p className="text-slate-300">Certified electronic evidence package adheres to Section 65B Indian Evidence Act standards.</p>
+                <div className="text-[11px] text-emerald-400 flex items-center gap-1.5 pt-1">
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                  <span>SHA-256 Bit-Stream Preservation Verified</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Tab 5: Audit Timeline & Status History */}
       {activeTab === 'history' && (
         <div className="space-y-4">
@@ -1124,15 +1481,15 @@ modification, tamper event, or parity mismatch was detected during verification.
       )}
 
       {/* 100% Full-Screen Opaque Assign Team Member Modal (with Type-to-Search / Type-Custom) */}
-      {showAssignModal && (
-        <div className="fixed inset-0 z-[999] w-screen h-screen bg-black/90 backdrop-blur-2xl flex items-center justify-center p-4 animate-in fade-in duration-150">
+      {showAssignModal && createPortal(
+        <div className="fixed inset-0 z-[99999] w-screen h-screen min-h-screen bg-black/95 backdrop-blur-2xl flex items-center justify-center p-4 animate-in fade-in duration-150">
           <div className="obsidian-card w-full max-w-lg p-6 sm:p-7 rounded-3xl shadow-[0_25px_60px_rgba(0,0,0,0.95)] space-y-4 border border-white/10">
             <div className="flex items-center justify-between border-b border-white/[0.08] pb-3">
               <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
                 <UserPlus className="w-4 h-4 text-violet-400" />
                 <span>Assign Officer to Dossier</span>
               </h3>
-              <button onClick={() => setShowAssignModal(false)} className="text-slate-400 hover:text-white p-1">
+              <button onClick={() => setShowAssignModal(false)} className="text-slate-400 hover:text-white p-1 cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -1205,7 +1562,7 @@ modification, tamper event, or parity mismatch was detected during verification.
                   required
                   value={selectedRoleInCase}
                   onChange={(e) => setSelectedRoleInCase(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-[#121524] border border-white/[0.08] rounded-xl text-xs text-white focus:outline-none focus:border-violet-500"
+                  className="w-full px-3.5 py-2.5 bg-[#121524] border border-white/[0.08] rounded-xl text-xs text-white focus:outline-none focus:border-violet-500 cursor-pointer"
                 >
                   <option value="LEAD_INVESTIGATOR">Lead Case Investigator</option>
                   <option value="INVESTIGATOR">Assisting Investigator</option>
@@ -1224,14 +1581,14 @@ modification, tamper event, or parity mismatch was detected during verification.
                 <button
                   type="button"
                   onClick={() => setShowAssignModal(false)}
-                  className="px-4 py-2 rounded-xl bg-[#181D33] text-slate-300 text-xs hover:bg-[#222946]"
+                  className="px-4 py-2 rounded-xl bg-[#181D33] text-slate-300 text-xs hover:bg-[#222946] cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={assigning}
-                  className="px-5 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold shadow-lg shadow-violet-600/30 flex items-center gap-1.5"
+                  className="px-5 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold shadow-lg shadow-violet-600/30 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                 >
                   <UserCheck className="w-3.5 h-3.5" />
                   <span>{assigning ? 'Authorizing...' : 'Authorize & Assign'}</span>
@@ -1239,19 +1596,20 @@ modification, tamper event, or parity mismatch was detected during verification.
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Register Evidence Modal */}
-      {showEvidenceModal && (
-        <div className="fixed inset-0 z-[999] w-screen h-screen bg-black/90 backdrop-blur-2xl flex items-center justify-center p-4 animate-in fade-in duration-150">
+      {showEvidenceModal && createPortal(
+        <div className="fixed inset-0 z-[99999] w-screen h-screen min-h-screen bg-black/95 backdrop-blur-2xl flex items-center justify-center p-4 animate-in fade-in duration-150">
           <div className="obsidian-card w-full max-w-md p-6 rounded-3xl shadow-2xl space-y-4 border border-white/10">
             <div className="flex items-center justify-between border-b border-white/[0.08] pb-3">
               <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
                 <Package className="w-4 h-4 text-violet-400" />
                 <span>Register Evidence Item</span>
               </h3>
-              <button onClick={() => setShowEvidenceModal(false)} className="text-slate-400 hover:text-white p-1">
+              <button onClick={() => setShowEvidenceModal(false)} className="text-slate-400 hover:text-white p-1 cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -1262,7 +1620,7 @@ modification, tamper event, or parity mismatch was detected during verification.
                 <select
                   value={evidenceForm.itemCategory}
                   onChange={(e) => setEvidenceForm({ ...evidenceForm, itemCategory: e.target.value })}
-                  className="w-full px-3.5 py-2 bg-[#121524] border border-white/[0.08] rounded-xl text-xs text-white focus:outline-none focus:border-violet-500"
+                  className="w-full px-3.5 py-2 bg-[#121524] border border-white/[0.08] rounded-xl text-xs text-white focus:outline-none focus:border-violet-500 cursor-pointer"
                 >
                   <option value="DIGITAL_DEVICE">Digital Device (Storage, Phone, Laptop)</option>
                   <option value="PHYSICAL_WEAPON">Physical Weapon</option>
@@ -1300,32 +1658,33 @@ modification, tamper event, or parity mismatch was detected during verification.
                 <button
                   type="button"
                   onClick={() => setShowEvidenceModal(false)}
-                  className="px-4 py-2 rounded-xl bg-[#181D33] text-slate-300 text-xs"
+                  className="px-4 py-2 rounded-xl bg-[#181D33] text-slate-300 text-xs cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={registeringEvidence}
-                  className="px-5 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold shadow-lg"
+                  className="px-5 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold shadow-lg cursor-pointer disabled:opacity-50"
                 >
                   {registeringEvidence ? 'Registering...' : 'Register & Seal'}
                 </button>
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Status Transition Modal */}
-      {showStatusModal && (
-        <div className="fixed inset-0 z-[999] w-screen h-screen bg-black/90 backdrop-blur-2xl flex items-center justify-center p-4 animate-in fade-in duration-150">
+      {showStatusModal && createPortal(
+        <div className="fixed inset-0 z-[99999] w-screen h-screen min-h-screen bg-black/95 backdrop-blur-2xl flex items-center justify-center p-4 animate-in fade-in duration-150">
           <div className="obsidian-card w-full max-w-md p-6 rounded-3xl shadow-2xl space-y-4 border border-white/10">
             <div className="flex items-center justify-between border-b border-white/[0.08] pb-3">
               <h3 className="text-sm font-bold text-white uppercase tracking-wider">
                 Transition Dossier Status
               </h3>
-              <button onClick={() => setShowStatusModal(false)} className="text-slate-400 hover:text-white p-1">
+              <button onClick={() => setShowStatusModal(false)} className="text-slate-400 hover:text-white p-1 cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -1336,7 +1695,7 @@ modification, tamper event, or parity mismatch was detected during verification.
                   required
                   value={targetStatus}
                   onChange={(e) => setTargetStatus(e.target.value)}
-                  className="w-full px-3.5 py-2 bg-[#121524] border border-white/[0.08] rounded-xl text-xs text-white focus:outline-none focus:border-violet-500"
+                  className="w-full px-3.5 py-2 bg-[#121524] border border-white/[0.08] rounded-xl text-xs text-white focus:outline-none focus:border-violet-500 cursor-pointer"
                 >
                   <option value="">Select target status...</option>
                   <option value="REGISTERED">REGISTERED</option>
@@ -1344,6 +1703,7 @@ modification, tamper event, or parity mismatch was detected during verification.
                   <option value="CHARGESHEET_FILED">CHARGESHEET_FILED</option>
                   <option value="IN_TRIAL">IN_TRIAL</option>
                   <option value="CLOSED">CLOSED</option>
+                  <option value="ARCHIVED">ARCHIVED (WORM Cold Storage)</option>
                 </select>
               </div>
               <div>
@@ -1361,21 +1721,119 @@ modification, tamper event, or parity mismatch was detected during verification.
                 <button
                   type="button"
                   onClick={() => setShowStatusModal(false)}
-                  className="px-4 py-2 rounded-xl bg-[#181D33] text-slate-300 text-xs"
+                  className="px-4 py-2 rounded-xl bg-[#181D33] text-slate-300 text-xs cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={transitioning}
-                  className="px-5 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold shadow-lg"
+                  className="px-5 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold shadow-lg cursor-pointer disabled:opacity-50"
                 >
                   {transitioning ? 'Updating...' : 'Commit Status'}
                 </button>
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
+      )}
+
+      {/* WORM Vault Archival Modal */}
+      {showArchiveModal && createPortal(
+        <div className="fixed inset-0 z-[99999] w-screen h-screen min-h-screen bg-black/95 backdrop-blur-2xl flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="obsidian-card w-full max-w-lg p-6 sm:p-7 rounded-3xl shadow-[0_25px_60px_rgba(0,0,0,0.95)] space-y-4 border border-amber-500/30">
+            <div className="flex items-center justify-between border-b border-white/[0.08] pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-amber-500/20 border border-amber-500/40 rounded-xl text-amber-400">
+                  <Archive className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+                    Statutory Archival & WORM Preservation
+                  </h3>
+                  <p className="text-[10px] font-mono text-amber-400">
+                    Write-Once-Read-Many (WORM) Compliance Object-Lock
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => setShowArchiveModal(false)} className="text-slate-400 hover:text-white p-1 cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-amber-950/30 border border-amber-800/40 text-[11px] text-amber-200/90 leading-relaxed space-y-1">
+              <p className="font-semibold flex items-center gap-1.5 text-amber-300">
+                <Shield className="w-3.5 h-3.5 text-amber-400" />
+                Immutable Statutory Preservation Notice:
+              </p>
+              <p>
+                Archiving this dossier seals all associated evidence items and documents into the cold WORM Object Vault. Under <span className="font-mono text-amber-300 font-bold">{archiveForm.wormMode}</span> mode, documents cannot be modified, deleted, or purged by any officer (including admins) until the retention lock expires.
+              </p>
+            </div>
+
+            <form onSubmit={handleArchiveCase} className="space-y-3.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">Retention Duration</label>
+                  <select
+                    value={archiveForm.retentionYears}
+                    onChange={(e) => setArchiveForm({ ...archiveForm, retentionYears: parseInt(e.target.value, 10) })}
+                    className="w-full px-3.5 py-2 bg-[#121524] border border-white/[0.08] rounded-xl text-xs text-white focus:outline-none focus:border-amber-500 cursor-pointer font-mono"
+                  >
+                    <option value={5}>5 Years (Standard Offenses)</option>
+                    <option value={10}>10 Years (Heinous Crimes / Cyber)</option>
+                    <option value={25}>25 Years (Major National Espionage)</option>
+                    <option value={50}>50 Years (Permanent Statutory Hold)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">WORM Preservation Mode</label>
+                  <select
+                    value={archiveForm.wormMode}
+                    onChange={(e) => setArchiveForm({ ...archiveForm, wormMode: e.target.value })}
+                    className="w-full px-3.5 py-2 bg-[#121524] border border-white/[0.08] rounded-xl text-xs text-white focus:outline-none focus:border-amber-500 cursor-pointer font-mono"
+                  >
+                    <option value="COMPLIANCE">COMPLIANCE (Strict Non-Overridable)</option>
+                    <option value="GOVERNANCE">GOVERNANCE (Supervisory Protection)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1">Archival Justification & Statutory Rationale</label>
+                <textarea
+                  required
+                  rows="3"
+                  value={archiveForm.archiveReason}
+                  onChange={(e) => setArchiveForm({ ...archiveForm, archiveReason: e.target.value })}
+                  placeholder="Specify legal limitation period, appellate closure, or judicial archive order..."
+                  className="w-full px-3.5 py-2 bg-[#121524] border border-white/[0.08] rounded-xl text-xs text-white focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2.5 border-t border-white/[0.08]">
+                <button
+                  type="button"
+                  onClick={() => setShowArchiveModal(false)}
+                  className="px-4 py-2 rounded-xl bg-[#181D33] text-slate-300 text-xs hover:bg-[#222946] cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={archiving}
+                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white text-xs font-semibold shadow-lg shadow-amber-600/30 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <Archive className="w-3.5 h-3.5" />
+                  <span>{archiving ? 'Sealing into WORM Vault...' : 'Seal & Archive Case'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );

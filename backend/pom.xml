@@ -106,11 +106,11 @@
 			<version>${tika.version}</version>
 		</dependency>
 
-		<!-- MFA TOTP (Time-based One-Time Password) -->
+		<!-- H2 In-Memory Database (Local Development) -->
 		<dependency>
-			<groupId>com.warrenstrange</groupId>
-			<artifactId>googleauth</artifactId>
-			<version>${googleauth.version}</version>
+			<groupId>com.h2database</groupId>
+			<artifactId>h2</artifactId>
+			<scope>runtime</scope>
 		</dependency>
 
 		<!-- Cryptography & Digital Signatures -->
@@ -130,11 +130,6 @@
 			<groupId>org.springdoc</groupId>
 			<artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
 			<version>${springdoc.version}</version>
-		</dependency>
-
-		<dependency>
-			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-oauth2-client</artifactId>
 		</dependency>
 
 		<!-- Testing -->

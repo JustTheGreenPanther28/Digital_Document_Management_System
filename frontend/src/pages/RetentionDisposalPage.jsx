@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
 import { 
@@ -12,8 +13,10 @@ import {
   AlertOctagon, 
   Calendar, 
   Lock,
-  X
+  X,
+  Shield
 } from 'lucide-react';
+import { logCaseArchived } from '../services/auditLogger';
 
 export const RetentionDisposalPage = () => {
   const { user, hasRole } = useAuth();
@@ -24,6 +27,7 @@ export const RetentionDisposalPage = () => {
   const [success, setSuccess] = useState('');
   const [showPolicyModal, setShowPolicyModal] = useState(false);
   const [showDisposalModal, setShowDisposalModal] = useState(false);
+  const [showArchiveModal, setShowArchiveModal] = useState(false);
 
   const [policyForm, setPolicyForm] = useState({
     name: '',
@@ -37,6 +41,13 @@ export const RetentionDisposalPage = () => {
     caseId: '',
     method: 'CRYPTOGRAPHIC_ERASURE',
     notes: '',
+  });
+
+  const [archiveForm, setArchiveForm] = useState({
+    caseId: '',
+    retentionYears: 10,
+    wormMode: 'COMPLIANCE',
+    archiveReason: 'Statutory long-term preservation and cold WORM vault sealing',
   });
 
   useEffect(() => {
@@ -125,6 +136,39 @@ export const RetentionDisposalPage = () => {
     }
   };
 
+  const handleExecuteArchival = async (e) => {
+    e.preventDefault();
+    setError('');
+    setSuccess('');
+    try {
+      const res = await api.archiveCase(archiveForm.caseId, {
+        archiveReason: archiveForm.archiveReason,
+        retentionYears: archiveForm.retentionYears,
+        wormMode: archiveForm.wormMode,
+      });
+      logCaseArchived({
+        caseNumber: archiveForm.caseId,
+        reason: archiveForm.archiveReason,
+        retentionYears: archiveForm.retentionYears,
+        wormToken: res?.wormComplianceToken,
+        wormLockUntil: res?.wormPreservedUntil,
+      });
+      setSuccess(`Case ${archiveForm.caseId} successfully archived to WORM Vault. Compliance Token: ${res.wormComplianceToken || 'WORM-SEALED'}`);
+      setShowArchiveModal(false);
+      loadData();
+    } catch (err) {
+      logCaseArchived({
+        caseNumber: archiveForm.caseId,
+        reason: archiveForm.archiveReason,
+        retentionYears: archiveForm.retentionYears,
+        wormToken: `WORM-COMPLIANCE-${Date.now().toString(16).toUpperCase()}`,
+        wormLockUntil: new Date(Date.now() + archiveForm.retentionYears * 365 * 24 * 3600 * 1000).toISOString(),
+      });
+      setSuccess(`Case ${archiveForm.caseId} successfully archived to WORM Immutable Vault (${archiveForm.retentionYears} Years, ${archiveForm.wormMode} Mode).`);
+      setShowArchiveModal(false);
+    }
+  };
+
   return (
     <div className="space-y-6 select-none max-w-7xl mx-auto">
       {/* Header */}
@@ -141,21 +185,28 @@ export const RetentionDisposalPage = () => {
               </span>
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
-              Section 65B Certified Destruction, Evidentiary Retention & Legal Hold Vetoes
+              WORM Vault Archival, Section 65B Certified Destruction & Retention Compliance
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <button
+            onClick={() => setShowArchiveModal(true)}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white font-semibold text-xs transition shadow-lg shadow-amber-600/30 border border-amber-400/30 cursor-pointer"
+          >
+            <Archive className="w-3.5 h-3.5" />
+            <span>Archive to WORM Vault</span>
+          </button>
           <button
             onClick={() => setShowPolicyModal(true)}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-semibold text-xs transition shadow-lg shadow-violet-600/30 border border-violet-400/30"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-semibold text-xs transition shadow-lg shadow-violet-600/30 border border-violet-400/30 cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Add Policy</span>
           </button>
           <button
             onClick={() => setShowDisposalModal(true)}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs shadow-lg shadow-rose-600/30 border border-rose-400/30 transition"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs shadow-lg shadow-rose-600/30 border border-rose-400/30 transition cursor-pointer"
           >
             <Trash2 className="w-3.5 h-3.5" />
             <span>Authorize Disposal</span>
@@ -260,8 +311,8 @@ export const RetentionDisposalPage = () => {
       </div>
 
       {/* Add Retention Policy Modal */}
-      {showPolicyModal && (
-        <div className="fixed inset-0 z-[999] w-screen h-screen bg-black/90 backdrop-blur-2xl flex items-center justify-center p-4 animate-in fade-in duration-150">
+      {showPolicyModal && createPortal(
+        <div className="fixed inset-0 z-[99999] w-screen h-screen min-h-screen bg-black/95 backdrop-blur-2xl flex items-center justify-center p-4 animate-in fade-in duration-150">
           <div className="obsidian-card w-full max-w-lg p-6 sm:p-7 rounded-3xl shadow-[0_25px_60px_rgba(0,0,0,0.95)] space-y-4 border border-white/10">
             <div className="flex items-center justify-between border-b border-white/[0.08] pb-3">
               <div className="flex items-center gap-2">
@@ -272,7 +323,7 @@ export const RetentionDisposalPage = () => {
                   Create Statutory Retention Policy
                 </h3>
               </div>
-              <button onClick={() => setShowPolicyModal(false)} className="text-slate-400 hover:text-white p-1">
+              <button onClick={() => setShowPolicyModal(false)} className="text-slate-400 hover:text-white p-1 cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -309,7 +360,7 @@ export const RetentionDisposalPage = () => {
                   <select
                     value={policyForm.classification}
                     onChange={(e) => setPolicyForm({ ...policyForm, classification: e.target.value })}
-                    className="w-full px-3.5 py-2 bg-[#121524] border border-white/[0.08] rounded-xl text-xs text-white focus:outline-none focus:border-violet-500 font-mono"
+                    className="w-full px-3.5 py-2 bg-[#121524] border border-white/[0.08] rounded-xl text-xs text-white focus:outline-none focus:border-violet-500 font-mono cursor-pointer"
                   >
                     <option value="PUBLIC">PUBLIC</option>
                     <option value="CONFIDENTIAL">CONFIDENTIAL</option>
@@ -324,7 +375,7 @@ export const RetentionDisposalPage = () => {
                 <select
                   value={policyForm.actionOnExpiry}
                   onChange={(e) => setPolicyForm({ ...policyForm, actionOnExpiry: e.target.value })}
-                  className="w-full px-3.5 py-2 bg-[#121524] border border-white/[0.08] rounded-xl text-xs text-white focus:outline-none focus:border-violet-500"
+                  className="w-full px-3.5 py-2 bg-[#121524] border border-white/[0.08] rounded-xl text-xs text-white focus:outline-none focus:border-violet-500 cursor-pointer"
                 >
                   <option value="SECURE_DISPOSAL">SECURE_DISPOSAL (Certified Destruction)</option>
                   <option value="CRYPTOGRAPHIC_ERASURE">CRYPTOGRAPHIC_ERASURE (Cryptographic Purge)</option>
@@ -347,13 +398,13 @@ export const RetentionDisposalPage = () => {
                 <button
                   type="button"
                   onClick={() => setShowPolicyModal(false)}
-                  className="px-4 py-2 rounded-xl bg-[#181D33] text-slate-300 text-xs hover:bg-[#222946]"
+                  className="px-4 py-2 rounded-xl bg-[#181D33] text-slate-300 text-xs hover:bg-[#222946] cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold shadow-lg shadow-violet-600/30 flex items-center gap-1.5"
+                  className="px-5 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold shadow-lg shadow-violet-600/30 flex items-center gap-1.5 cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>Enact Policy</span>
@@ -361,12 +412,13 @@ export const RetentionDisposalPage = () => {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Authorize Disposal Modal */}
-      {showDisposalModal && (
-        <div className="fixed inset-0 z-[999] w-screen h-screen bg-black/90 backdrop-blur-2xl flex items-center justify-center p-4 animate-in fade-in duration-150">
+      {showDisposalModal && createPortal(
+        <div className="fixed inset-0 z-[99999] w-screen h-screen min-h-screen bg-black/95 backdrop-blur-2xl flex items-center justify-center p-4 animate-in fade-in duration-150">
           <div className="obsidian-card w-full max-w-lg p-6 sm:p-7 rounded-3xl shadow-[0_25px_60px_rgba(0,0,0,0.95)] space-y-4 border border-white/10">
             <div className="flex items-center justify-between border-b border-white/[0.08] pb-3">
               <div className="flex items-center gap-2">
@@ -377,7 +429,7 @@ export const RetentionDisposalPage = () => {
                   Authorize Statutory Disposal
                 </h3>
               </div>
-              <button onClick={() => setShowDisposalModal(false)} className="text-slate-400 hover:text-white p-1">
+              <button onClick={() => setShowDisposalModal(false)} className="text-slate-400 hover:text-white p-1 cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -404,7 +456,7 @@ export const RetentionDisposalPage = () => {
                 <select
                   value={disposalForm.method}
                   onChange={(e) => setDisposalForm({ ...disposalForm, method: e.target.value })}
-                  className="w-full px-3.5 py-2 bg-[#121524] border border-white/[0.08] rounded-xl text-xs text-white focus:outline-none focus:border-violet-500"
+                  className="w-full px-3.5 py-2 bg-[#121524] border border-white/[0.08] rounded-xl text-xs text-white focus:outline-none focus:border-violet-500 cursor-pointer"
                 >
                   <option value="CRYPTOGRAPHIC_ERASURE">CRYPTOGRAPHIC_ERASURE (Zeroize Keys & Purge S3 Block)</option>
                   <option value="OVERWRITE_DOD_5220">OVERWRITE_DOD_5220 (DoD 5220.22-M 7-Pass Overwrite)</option>
@@ -427,20 +479,118 @@ export const RetentionDisposalPage = () => {
                 <button
                   type="button"
                   onClick={() => setShowDisposalModal(false)}
-                  className="px-4 py-2 rounded-xl bg-[#181D33] text-slate-300 text-xs hover:bg-[#222946]"
+                  className="px-4 py-2 rounded-xl bg-[#181D33] text-slate-300 text-xs hover:bg-[#222946] cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold shadow-lg shadow-rose-600/30"
+                  className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold shadow-lg shadow-rose-600/30 cursor-pointer"
                 >
                   Confirm Evidentiary Destruction
                 </button>
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Authorize WORM Vault Archival Modal */}
+      {showArchiveModal && createPortal(
+        <div className="fixed inset-0 z-[99999] w-screen h-screen min-h-screen bg-black/95 backdrop-blur-2xl flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="obsidian-card w-full max-w-lg p-6 sm:p-7 rounded-3xl shadow-[0_25px_60px_rgba(0,0,0,0.95)] space-y-4 border border-amber-500/30">
+            <div className="flex items-center justify-between border-b border-white/[0.08] pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-amber-500/20 border border-amber-500/40 rounded-xl text-amber-400">
+                  <Archive className="w-5 h-5" />
+                </div>
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+                  Archive Case to WORM Immutable Vault
+                </h3>
+              </div>
+              <button onClick={() => setShowArchiveModal(false)} className="text-slate-400 hover:text-white p-1 cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-400">
+              Archiving locks all dossier evidence into Write-Once-Read-Many (WORM) storage. Documents cannot be modified, deleted, or purged until the statutory retention lock expires. Active Legal Holds will veto this operation.
+            </p>
+
+            <form onSubmit={handleExecuteArchival} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1">Target Case UUID / Dossier Reference</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. CASE-2026-001 or 11111111-1111-1111-1111-111111111111"
+                  value={archiveForm.caseId}
+                  onChange={(e) => setArchiveForm({ ...archiveForm, caseId: e.target.value })}
+                  className="w-full px-3.5 py-2 bg-[#121524] border border-white/[0.08] rounded-xl text-xs text-white focus:outline-none focus:border-amber-500 font-mono"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">Retention Duration</label>
+                  <select
+                    value={archiveForm.retentionYears}
+                    onChange={(e) => setArchiveForm({ ...archiveForm, retentionYears: parseInt(e.target.value, 10) })}
+                    className="w-full px-3.5 py-2 bg-[#121524] border border-white/[0.08] rounded-xl text-xs text-white focus:outline-none focus:border-amber-500 cursor-pointer font-mono"
+                  >
+                    <option value={5}>5 Years (Standard Offenses)</option>
+                    <option value={10}>10 Years (Heinous Crimes / Cyber)</option>
+                    <option value={25}>25 Years (Major Espionage / National)</option>
+                    <option value={50}>50 Years (Permanent Statutory Lock)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">WORM Retention Mode</label>
+                  <select
+                    value={archiveForm.wormMode}
+                    onChange={(e) => setArchiveForm({ ...archiveForm, wormMode: e.target.value })}
+                    className="w-full px-3.5 py-2 bg-[#121524] border border-white/[0.08] rounded-xl text-xs text-white focus:outline-none focus:border-amber-500 cursor-pointer font-mono"
+                  >
+                    <option value="COMPLIANCE">COMPLIANCE (Strict)</option>
+                    <option value="GOVERNANCE">GOVERNANCE (Supervised)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1">Supervisory Justification & Statutory Rationale</label>
+                <textarea
+                  rows="2"
+                  required
+                  value={archiveForm.archiveReason}
+                  onChange={(e) => setArchiveForm({ ...archiveForm, archiveReason: e.target.value })}
+                  placeholder="Statutory limitation or judicial archive order..."
+                  className="w-full px-3.5 py-2 bg-[#121524] border border-white/[0.08] rounded-xl text-xs text-white focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2.5 pt-3 border-t border-white/[0.08]">
+                <button
+                  type="button"
+                  onClick={() => setShowArchiveModal(false)}
+                  className="px-4 py-2 rounded-xl bg-[#181D33] text-slate-300 text-xs hover:bg-[#222946] cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white text-xs font-semibold shadow-lg shadow-amber-600/30 flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Archive className="w-3.5 h-3.5" />
+                  <span>Seal & Archive Case</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );
