@@ -292,7 +292,10 @@ export const CourtProceedingsPage = () => {
 
     setCases(combined);
     if (combined.length > 0) {
-      setSelectedCaseId(combined[0].id);
+      const urlParams = new URLSearchParams(window.location.search);
+      const paramCaseId = urlParams.get('caseId');
+      const matched = paramCaseId ? combined.find(c => String(c.id) === String(paramCaseId) || c.caseNumber === paramCaseId) : null;
+      setSelectedCaseId(matched ? matched.id : combined[0].id);
     }
     setLoading(false);
   };

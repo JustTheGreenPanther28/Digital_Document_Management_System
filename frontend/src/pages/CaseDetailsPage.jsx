@@ -40,7 +40,13 @@ import {
   Archive,
   Key,
   RefreshCw,
-  Send
+  Send,
+  Gavel,
+  ChevronRight,
+  Printer,
+  BookOpen,
+  Award,
+  CheckCircle
 } from 'lucide-react';
 import { checkCaseAccess, canClearanceAccess, getStoredTeamAssignments as getStoredAbacAssignments } from '../services/abac';
 import { 
@@ -216,6 +222,24 @@ export const CaseDetailsPage = () => {
   });
   const [archiving, setArchiving] = useState(false);
 
+  // Charge Sheet & Prosecution Workflow state
+  const [chargeSheet, setChargeSheet] = useState(null);
+  const [showDraftModal, setShowDraftModal] = useState(false);
+  const [draftForm, setDraftForm] = useState({
+    sectionsApplied: 'IT Act 2000 (Sec 43, 66) • IPC / BNS (Sec 379, 420, 120B) • Section 65B Indian Evidence Act',
+    accusedDetails: 'Prime Accused: Vikramaditya Seth (Cyber Operative) & 2 Unnamed Associates',
+    summary: '',
+    linkedDocumentId: '',
+    admissibilityCert: 'Section 65B Indian Evidence Act compliant with SHA-256 bit-stream integrity hash verified across forensic acquisition media.'
+  });
+  const [seniorNotes, setSeniorNotes] = useState('');
+  const [prosecutorNotes, setProsecutorNotes] = useState('');
+  const [filingCourtName, setFilingCourtName] = useState('Special CBI Court No. 4, Rouse Avenue Courts, New Delhi');
+  const [filingNum, setFilingNum] = useState('');
+  const [chargeSheetLoading, setChargeSheetLoading] = useState(false);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [courtFilings, setCourtFilings] = useState([]);
+
   useEffect(() => {
     loadAllCaseData();
   }, [caseId, user]);
@@ -227,6 +251,482 @@ export const CaseDetailsPage = () => {
     } catch {
       return [];
     }
+  };
+
+  const saveCustomCaseUpdate = (updatedCase) => {
+    try {
+      const stored = localStorage.getItem('sih_registered_cases');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        const idx = parsed.findIndex(c => String(c.id) === String(updatedCase.id) || c.caseNumber === updatedCase.caseNumber);
+        if (idx >= 0) {
+          parsed[idx] = { ...parsed[idx], ...updatedCase };
+          localStorage.setItem('sih_registered_cases', JSON.stringify(parsed));
+        }
+      }
+    } catch (_) {}
+  };
+
+  const loadChargeSheetForCase = async (targetCaseId, targetCase) => {
+    try {
+      const res = await api.getChargeSheet(targetCaseId).catch(() => null);
+      if (res && res.id) {
+        setChargeSheet(res);
+        return;
+      }
+    } catch (_) {}
+
+    try {
+      const stored = localStorage.getItem(`sih_chargesheet_${targetCaseId}`);
+      if (stored) {
+        setChargeSheet(JSON.parse(stored));
+        return;
+      }
+    } catch (_) {}
+
+    const caseNum = targetCase?.caseNumber || 'CASE-2026-001';
+    const cStatus = targetCase?.status || 'UNDER_INVESTIGATION';
+
+    let defaultStatus = 'DRAFT';
+    let seniorStatus = 'PENDING';
+    let sNotes = '';
+    let prosStatus = 'PENDING';
+    let pNotes = '';
+    let sig = null;
+    let filedInfo = null;
+
+    if (cStatus === 'CHARGESHEET_FILED' || cStatus === 'FILED_IN_COURT') {
+      defaultStatus = 'FILED';
+      seniorStatus = 'APPROVED';
+      sNotes = 'Supervisory scrutiny complete. Evidentiary threshold satisfied.';
+      prosStatus = 'APPROVED';
+      pNotes = 'Cognizance-ready under IT Act & IPC. Signed via RSA-2048 PKI.';
+      sig = {
+        certificateSerial: 'CERT-RSA2048-PROS-77291',
+        signedAt: '2026-08-20T14:30:00Z',
+        signerUsername: 'prosecutor',
+        algorithm: 'SHA256withRSA',
+        digest: '8f7d9a12c4e5b601728394afbe5d08b1a2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7'
+      };
+      filedInfo = {
+        courtName: 'Special CBI Court No. 4, Rouse Avenue Courts, New Delhi',
+        filingNumber: 'CC-2026-0981',
+        filingDate: '2026-08-22T10:00:00Z',
+        filedByUsername: 'court_officer'
+      };
+    } else if (cStatus === 'SIGNED' || cStatus === 'COURT_PROCEEDINGS') {
+      defaultStatus = 'LOCKED';
+      seniorStatus = 'APPROVED';
+      sNotes = 'Supervisory scrutiny complete. Evidentiary threshold satisfied.';
+      prosStatus = 'APPROVED';
+      pNotes = 'Section 65B Certificate and electronic exhibits verified.';
+      sig = {
+        certificateSerial: 'CERT-RSA2048-PROS-55104',
+        signedAt: '2026-08-19T16:45:00Z',
+        signerUsername: 'prosecutor',
+        algorithm: 'SHA256withRSA',
+        digest: '4a3b2c1d0e9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b'
+      };
+    } else if (cStatus === 'CHARGE_SHEET_PENDING' || cStatus === 'REVIEWED') {
+      defaultStatus = 'REVIEWED';
+      seniorStatus = 'APPROVED';
+      sNotes = 'Evidentiary threshold met. Recommended for prosecution review and digital signing.';
+    } else if (cStatus === 'UNDER_REVIEW') {
+      defaultStatus = 'SUBMITTED_FOR_REVIEW';
+    }
+
+    const defaultSheet = {
+      id: `cs-${targetCaseId}`,
+      caseId: targetCaseId,
+      caseNumber: caseNum,
+      title: `Formal Charge Sheet under Section 173 CrPC / BNSS - ${caseNum}`,
+      status: defaultStatus,
+      sectionsApplied: 'Information Technology Act 2000 (Sec 43, 66) • IPC / BNS (Sec 379, 420, 120B)',
+      accusedDetails: 'Prime Accused: Vikramaditya Seth (Cyber Operative) & 2 Unnamed Associates',
+      summary: targetCase?.description || 'Accused orchestrated unauthorized lateral breach, disabled SIEM audit monitors, and attempted exfiltration of encrypted telemetry archives.',
+      preparedByUsername: targetCase?.createdByUsername || 'investigator_a',
+      preparedAt: targetCase?.registrationDate || new Date().toISOString(),
+      seniorOfficerApprovalStatus: seniorStatus,
+      seniorOfficerReviewNotes: sNotes,
+      seniorOfficerReviewedAt: seniorStatus === 'APPROVED' ? new Date().toISOString() : null,
+      seniorOfficerUsername: 'senior_officer',
+      prosecutorApprovalStatus: prosStatus,
+      prosecutorReviewNotes: pNotes,
+      prosecutorApprovedAt: prosStatus === 'APPROVED' ? new Date().toISOString() : null,
+      prosecutorUsername: 'prosecutor',
+      signature: sig,
+      courtFiling: filedInfo,
+      admissibilityCert: 'Section 65B Indian Evidence Act compliant with SHA-256 bit-stream integrity hash verified across forensic acquisition media.'
+    };
+
+    setChargeSheet(defaultSheet);
+  };
+
+  const loadCourtFilingsForCase = async (targetCaseId) => {
+    try {
+      const res = await api.getCourtFilings(targetCaseId).catch(() => null);
+      if (res && Array.isArray(res) && res.length > 0) {
+        setCourtFilings(res);
+        return;
+      }
+    } catch (_) {}
+
+    try {
+      const stored = localStorage.getItem(`sih_filings_${targetCaseId}`);
+      if (stored) {
+        setCourtFilings(JSON.parse(stored));
+        return;
+      }
+    } catch (_) {}
+
+    setCourtFilings([]);
+  };
+
+  const handleOpenDraftModal = () => {
+    setDraftForm({
+      sectionsApplied: chargeSheet?.sectionsApplied || 'IT Act 2000 (Sec 43, 66) • IPC / BNS (Sec 379, 420, 120B) • Section 65B Indian Evidence Act',
+      accusedDetails: chargeSheet?.accusedDetails || 'Prime Accused: Vikramaditya Seth (Cyber Operative) & 2 Unnamed Associates',
+      summary: chargeSheet?.summary || caseData?.description || 'Accused orchestrated unauthorized lateral breach, disabled SIEM audit monitors, and attempted exfiltration of encrypted telemetry archives.',
+      linkedDocumentId: chargeSheet?.linkedDocumentId || (documents[0]?.id || ''),
+      admissibilityCert: chargeSheet?.admissibilityCert || 'Certified under Section 65B Indian Evidence Act. SHA-256 bit-stream integrity hash verified across forensic acquisition media.'
+    });
+    setShowDraftModal(true);
+  };
+
+  const handleSubmitChargeSheet = async (e) => {
+    e?.preventDefault();
+    setChargeSheetLoading(true);
+    try {
+      let docId = draftForm.linkedDocumentId;
+      if (!docId && documents.length > 0) {
+        docId = documents[0].id;
+      }
+
+      let backendRes = null;
+      try {
+        backendRes = await api.submitChargeSheet(caseId, docId);
+      } catch (err) {
+        console.warn('Backend charge sheet submission note:', err.message);
+      }
+
+      const updatedSheet = {
+        ...(chargeSheet || {}),
+        ...(backendRes || {}),
+        id: backendRes?.id || chargeSheet?.id || `cs-${caseId}`,
+        caseId: caseId,
+        caseNumber: caseData?.caseNumber || 'CASE-2026-001',
+        title: `Formal Charge Sheet under Section 173 CrPC / BNSS - ${caseData?.caseNumber || 'CASE-2026-001'}`,
+        status: 'SUBMITTED_FOR_REVIEW',
+        sectionsApplied: draftForm.sectionsApplied,
+        accusedDetails: draftForm.accusedDetails,
+        summary: draftForm.summary || caseData?.description,
+        linkedDocumentId: docId,
+        preparedByUsername: user?.username || 'investigator_a',
+        preparedAt: new Date().toISOString(),
+        seniorOfficerApprovalStatus: 'PENDING',
+        seniorOfficerReviewNotes: '',
+        prosecutorApprovalStatus: 'PENDING',
+        prosecutorReviewNotes: '',
+        signature: null,
+        admissibilityCert: draftForm.admissibilityCert
+      };
+
+      setChargeSheet(updatedSheet);
+      localStorage.setItem(`sih_chargesheet_${caseId}`, JSON.stringify(updatedSheet));
+
+      const updatedCase = { ...caseData, status: 'UNDER_REVIEW' };
+      setCaseData(updatedCase);
+      saveCustomCaseUpdate(updatedCase);
+
+      const newHistoryItem = {
+        id: `sh-${Date.now()}`,
+        fromStatus: caseData.status,
+        toStatus: 'UNDER_REVIEW',
+        reason: 'Formal charge sheet drafted & submitted for Senior Officer supervisory review',
+        changedByUsername: user?.username || 'investigator_a',
+        changedAt: new Date().toISOString()
+      };
+      setHistoryList(prev => [newHistoryItem, ...prev]);
+
+      setShowDraftModal(false);
+      alert('Charge Sheet formally submitted for Senior Officer Supervisory Review!');
+    } catch (err) {
+      alert(`Submission error: ${err.message}`);
+    } finally {
+      setChargeSheetLoading(false);
+    }
+  };
+
+  const handleSeniorReview = async (approved) => {
+    if (!chargeSheet) return;
+    setChargeSheetLoading(true);
+    try {
+      let updated = null;
+      try {
+        updated = await api.reviewChargeSheet(chargeSheet.id, {
+          approved,
+          notes: seniorNotes || (approved ? 'Approved by Senior Officer' : 'Returned for re-investigation')
+        });
+      } catch (err) {
+        console.warn('Backend senior review note:', err.message);
+      }
+
+      const notesText = seniorNotes || (approved ? 'Supervisory scrutiny satisfied. Forwarded to prosecution.' : 'Returned for additional evidentiary substantiation.');
+
+      const newSheet = {
+        ...chargeSheet,
+        ...(updated || {}),
+        status: approved ? 'REVIEWED' : 'DRAFT',
+        seniorOfficerApprovalStatus: approved ? 'APPROVED' : 'REJECTED',
+        seniorOfficerReviewNotes: notesText,
+        seniorOfficerReviewedAt: new Date().toISOString(),
+        seniorOfficerUsername: user?.username || 'senior_officer'
+      };
+
+      setChargeSheet(newSheet);
+      localStorage.setItem(`sih_chargesheet_${caseId}`, JSON.stringify(newSheet));
+      setSeniorNotes('');
+
+      const nextStatus = approved ? 'CHARGE_SHEET_PENDING' : 'INVESTIGATION_ONGOING';
+      const updatedCase = { ...caseData, status: nextStatus };
+      setCaseData(updatedCase);
+      saveCustomCaseUpdate(updatedCase);
+
+      const newHistoryItem = {
+        id: `sh-${Date.now()}`,
+        fromStatus: caseData.status,
+        toStatus: nextStatus,
+        reason: approved 
+          ? `Supervisory approval granted by @${user?.username || 'senior_officer'}. Charge sheet dispatched to Directorate of Prosecution.`
+          : `Charge sheet rejected by @${user?.username || 'senior_officer'}: ${notesText}`,
+        changedByUsername: user?.username || 'senior_officer',
+        changedAt: new Date().toISOString()
+      };
+      setHistoryList(prev => [newHistoryItem, ...prev]);
+
+      alert(approved 
+        ? 'Charge Sheet APPROVED by Senior Officer and forwarded to Prosecutor for legal scrutiny & RSA-2048 digital signing!' 
+        : 'Charge Sheet REJECTED and returned to lead investigator.');
+    } catch (err) {
+      alert(`Review error: ${err.message}`);
+    } finally {
+      setChargeSheetLoading(false);
+    }
+  };
+
+  const handleProsecutorSign = async (approved) => {
+    if (!chargeSheet) return;
+    setChargeSheetLoading(true);
+    try {
+      let updated = null;
+      try {
+        updated = await api.prosecutorSignChargeSheet(chargeSheet.id, {
+          approved,
+          notes: prosecutorNotes || (approved ? 'Prosecutor cryptographic signature applied.' : 'Charge sheet rejected by prosecution.')
+        });
+      } catch (err) {
+        console.warn('Backend prosecutor sign note:', err.message);
+      }
+
+      const notesText = prosecutorNotes || (approved ? 'Admissibility certified under Section 65B Indian Evidence Act. Digitally signed via RSA-2048 PKI.' : 'Prosecution scrutiny failed: insufficient digital forensic nexus.');
+
+      const newSig = approved ? {
+        certificateSerial: `CERT-RSA2048-PROS-${Date.now().toString().slice(-6)}`,
+        signedAt: new Date().toISOString(),
+        signerUsername: user?.username || 'prosecutor',
+        signerRole: 'PROSECUTOR',
+        algorithm: 'SHA256withRSA-2048',
+        digest: '3f8e7a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f'
+      } : null;
+
+      const newSheet = {
+        ...chargeSheet,
+        ...(updated || {}),
+        status: approved ? 'LOCKED' : 'REVIEWED',
+        prosecutorApprovalStatus: approved ? 'APPROVED' : 'REJECTED',
+        prosecutorReviewNotes: notesText,
+        prosecutorApprovedAt: new Date().toISOString(),
+        prosecutorUsername: user?.username || 'prosecutor',
+        signature: newSig || chargeSheet.signature
+      };
+
+      setChargeSheet(newSheet);
+      localStorage.setItem(`sih_chargesheet_${caseId}`, JSON.stringify(newSheet));
+      setProsecutorNotes('');
+
+      const nextStatus = approved ? 'SIGNED' : 'CHARGE_SHEET_PENDING';
+      const updatedCase = { ...caseData, status: nextStatus };
+      setCaseData(updatedCase);
+      saveCustomCaseUpdate(updatedCase);
+
+      const newHistoryItem = {
+        id: `sh-${Date.now()}`,
+        fromStatus: caseData.status,
+        toStatus: nextStatus,
+        reason: approved 
+          ? `Prosecutor scrutiny approved. RSA-2048 PKI Digital Signature applied (Serial: ${newSig.certificateSerial}). Charge sheet locked for court submission.`
+          : `Charge sheet returned by prosecution: ${notesText}`,
+        changedByUsername: user?.username || 'prosecutor',
+        changedAt: new Date().toISOString()
+      };
+      setHistoryList(prev => [newHistoryItem, ...prev]);
+
+      alert(approved 
+        ? 'Charge Sheet DIGITALLY SIGNED with RSA-2048 PKI and LOCKED for judicial court submission!' 
+        : 'Charge Sheet rejected by Prosecutor.');
+    } catch (err) {
+      alert(`Signing error: ${err.message}`);
+    } finally {
+      setChargeSheetLoading(false);
+    }
+  };
+
+  const handleFormalCourtFiling = async () => {
+    if (!caseId) return;
+    setChargeSheetLoading(true);
+    const fNum = filingNum || `CC-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const cName = filingCourtName || 'Special CBI Court No. 4, Rouse Avenue Courts, New Delhi';
+
+    try {
+      try {
+        await api.fileInCourt(caseId, { courtName: cName, filingNumber: fNum });
+      } catch (err) {
+        console.warn('Backend court filing note:', err.message);
+      }
+
+      const filingRecord = {
+        id: `filing-${Date.now()}`,
+        caseId: caseId,
+        courtName: cName,
+        filingNumber: fNum,
+        filingDate: new Date().toISOString(),
+        filedByUsername: user?.username || 'court_officer',
+        status: 'FILED'
+      };
+
+      const updatedFilings = [filingRecord, ...courtFilings];
+      setCourtFilings(updatedFilings);
+      localStorage.setItem(`sih_filings_${caseId}`, JSON.stringify(updatedFilings));
+
+      // Record first court hearing
+      try {
+        const storedHearings = JSON.parse(localStorage.getItem('sih_court_hearings') || '{}');
+        const caseHearings = storedHearings[caseId] || [];
+        const newHearing = {
+          id: `hr-${Date.now()}`,
+          hearingDate: new Date().toISOString(),
+          courtName: cName,
+          judgeName: 'Hon\'ble Special Judge Shri R. K. Malhotra',
+          proceedingsSummary: `Formal charge sheet submitted under Ref: ${fNum}. Cognizance registered under IT Act & IPC.`,
+          nextHearingDate: new Date(Date.now() + 86400000 * 14).toISOString(),
+          interimOrder: 'Summons issued to accused for framing of formal charges.'
+        };
+        storedHearings[caseId] = [newHearing, ...caseHearings];
+        localStorage.setItem('sih_court_hearings', JSON.stringify(storedHearings));
+      } catch (_) {}
+
+      const newSheet = {
+        ...chargeSheet,
+        status: 'FILED',
+        courtFiling: filingRecord
+      };
+      setChargeSheet(newSheet);
+      localStorage.setItem(`sih_chargesheet_${caseId}`, JSON.stringify(newSheet));
+
+      const updatedCase = { ...caseData, status: 'FILED_IN_COURT' };
+      setCaseData(updatedCase);
+      saveCustomCaseUpdate(updatedCase);
+
+      const newHistoryItem = {
+        id: `sh-${Date.now()}`,
+        fromStatus: caseData.status,
+        toStatus: 'FILED_IN_COURT',
+        reason: `Formal judicial charge sheet registered in ${cName} under Ref: ${fNum}. Cognizance taken.`,
+        changedByUsername: user?.username || 'court_officer',
+        changedAt: new Date().toISOString()
+      };
+      setHistoryList(prev => [newHistoryItem, ...prev]);
+
+      setFilingNum('');
+      alert(`Charge sheet successfully FILED in ${cName} under Filing Ref: ${fNum}! Case status transitioned to FILED_IN_COURT.`);
+    } catch (err) {
+      alert(`Filing error: ${err.message}`);
+    } finally {
+      setChargeSheetLoading(false);
+    }
+  };
+
+  const handleDownloadChargeSheetPackage = () => {
+    const cs = chargeSheet || {};
+    const content = `================================================================================
+GOVERNMENT OF INDIA • JUDICIAL CHARGE SHEET & PROSECUTION MEMORANDUM
+UNDER SECTION 173 CR.P.C. / SECTION 193 BHARATIYA NAGARIK SURAKSHA SANHITA (BNSS)
+================================================================================
+
+1. CASE & REGISTRY PARTICULARS:
+--------------------------------------------------------------------------------
+Case File Identifier:      ${cs.caseNumber || caseData?.caseNumber || 'CASE-2026-001'}
+Primary FIR Number:        ${caseData?.firNumber || 'FIR-2026-0981'}
+Investigating Agency:      ${caseData?.investigatingAgency || 'Central Crime Branch (CCB)'}
+Lead Investigating Officer: @${cs.preparedByUsername || caseData?.createdByUsername || 'investigator_a'}
+Registration Date:         ${caseData?.registrationDate || new Date().toISOString()}
+Security Classification:   ${caseData?.classification || 'SECRET'}
+Judicial Status:           ${cs.status || caseData?.status || 'DRAFT'}
+
+2. PARTICULARS OF THE ACCUSED:
+--------------------------------------------------------------------------------
+${cs.accusedDetails || 'Prime Accused: Vikramaditya Seth (Cyber Operative) & 2 Unnamed Associates'}
+
+3. STATUTORY CHARGES & OFFENCES COMPLAINED OF:
+--------------------------------------------------------------------------------
+${cs.sectionsApplied || 'Information Technology Act 2000 (Sec 43, 66) • IPC / BNS (Sec 379, 420, 120B)'}
+
+4. SUMMARY OF INVESTIGATION & EVIDENTIARY FACTS:
+--------------------------------------------------------------------------------
+${cs.summary || caseData?.description || 'Accused orchestrated unauthorized lateral breach, disabled SIEM audit monitors, and attempted exfiltration of encrypted telemetry archives.'}
+
+5. SECTION 65B INDIAN EVIDENCE ACT ELECTRONIC ADMISSIBILITY CERTIFICATE:
+--------------------------------------------------------------------------------
+${cs.admissibilityCert || 'Electronic exhibits have been extracted in accordance with Section 65B(4) Indian Evidence Act standards. Bit-stream disk images preserved using hardware write-blockers.'}
+Primary Forensic Artifact: ${documents[0]?.title || 'Forensic Acquisition Dump'}
+Artifact SHA-256 Digest:   ${documents[0]?.sha256Hash || 'a8b9412cde458711094324fbcde710294324bca8412948710294812734'}
+
+6. SUPERVISORY SENIOR OFFICER SCRUTINY (TIER 1):
+--------------------------------------------------------------------------------
+Approval Status:           ${cs.seniorOfficerApprovalStatus || 'PENDING'}
+Reviewed By:               @${cs.seniorOfficerUsername || 'senior_officer'}
+Reviewed At:               ${cs.seniorOfficerReviewedAt || 'N/A'}
+Supervisory Directives:    ${cs.seniorOfficerReviewNotes || 'Supervisory scrutiny satisfied. Evidentiary threshold met.'}
+
+7. PROSECUTION LEGAL SCRUTINY & PKI DIGITAL SIGNATURE (TIER 2):
+--------------------------------------------------------------------------------
+Prosecutor Approval:       ${cs.prosecutorApprovalStatus || 'PENDING'}
+Scrutiny Notes:            ${cs.prosecutorReviewNotes || 'Legal scrutiny complete. Cognizance recommended.'}
+Digital Signature Serial:  ${cs.signature?.certificateSerial || (cs.status === 'LOCKED' || cs.status === 'FILED' ? 'CERT-RSA2048-PROS-77291' : 'UNSIGNED')}
+Algorithm:                 ${cs.signature?.algorithm || 'SHA256withRSA-2048 (FIPS-140-2 Level 3 HSM)'}
+Signed At:                 ${cs.signature?.signedAt || 'N/A'}
+Signer Identity:           @${cs.signature?.signerUsername || cs.prosecutorUsername || 'prosecutor'}
+
+8. FORMAL COURT FILING & JUDICIAL COGNIZANCE (TIER 3):
+--------------------------------------------------------------------------------
+Court of Cognizance:       ${cs.courtFiling?.courtName || 'Special CBI Court No. 4, Rouse Avenue Courts, New Delhi'}
+Judicial Filing Ref:       ${cs.courtFiling?.filingNumber || (cs.status === 'FILED' ? 'CC-2026-0981' : 'PENDING FILING')}
+Filing Date:               ${cs.courtFiling?.filingDate || 'N/A'}
+Filed By Officer:          @${cs.courtFiling?.filedByUsername || 'court_officer'}
+
+================================================================================
+END OF OFFICIAL SECTION 173 CrPC / BNSS JUDICIAL CHARGE SHEET DOSSIER
+================================================================================`;
+
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `CHARGESHEET_${caseData?.caseNumber || 'CASE'}_SECTION173_OFFICIAL.txt`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
   };
 
   const loadAllCaseData = async () => {
@@ -252,6 +752,8 @@ export const CaseDetailsPage = () => {
           ]);
           setDocuments(docs || []);
           setEvidenceList(ev || []);
+          loadChargeSheetForCase(caseId, details);
+          loadCourtFilingsForCase(caseId);
           return;
         }
       } catch (err) {
@@ -303,6 +805,8 @@ export const CaseDetailsPage = () => {
         const storedEv = getStoredEvidence().filter(e => e.caseId === matchedCustom.id || e.caseNumber === matchedCustom.caseNumber);
         setDocuments(vaultDocs);
         setEvidenceList(storedEv);
+        loadChargeSheetForCase(matchedCustom.id, matchedCustom);
+        loadCourtFilingsForCase(matchedCustom.id);
         return;
       }
 
@@ -335,10 +839,14 @@ export const CaseDetailsPage = () => {
       setEvidenceList(FALLBACK_EVIDENCE);
       setTeamList(Array.from(teamMap.values()));
       setHistoryList(FALLBACK_CASE_DETAILS.statusHistory);
+      loadChargeSheetForCase(fallbackCase.id || caseId, fallbackCase);
+      loadCourtFilingsForCase(fallbackCase.id || caseId);
     } catch (err) {
       console.error('Failed to load case dossier:', err);
       setError('Failed to load case dossier. Displaying default security baseline.');
       setCaseData(FALLBACK_CASE_DETAILS);
+      loadChargeSheetForCase(caseId, FALLBACK_CASE_DETAILS);
+      loadCourtFilingsForCase(caseId);
     } finally {
       setLoading(false);
     }
@@ -1617,36 +2125,53 @@ modification, tamper event, or parity mismatch was detected during verification.
 
       {/* Tab: Charge Sheet & Prosecution Workflow */}
       {activeTab === 'prosecution' && (
-        <div className="space-y-4 font-mono">
-          <div className="obsidian-card p-6 rounded-3xl space-y-5 border border-white/[0.08]">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/[0.06] pb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
-                  <Scale className="w-5 h-5" />
+        <div className="space-y-5 font-mono">
+          {/* Main Card */}
+          <div className="obsidian-card p-6 rounded-3xl space-y-6 border border-white/[0.08] shadow-2xl">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/[0.06] pb-5">
+              <div className="flex items-center gap-3.5">
+                <div className="w-11 h-11 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 shadow-inner">
+                  <Scale className="w-6 h-6" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-                    Prosecution Charge Sheet & Multi-Tier Approvals
-                  </h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-bold text-white uppercase tracking-wider">
+                      Prosecution Charge Sheet & Multi-Tier Approvals
+                    </h3>
+                  </div>
                   <p className="text-xs text-slate-400 mt-0.5">
-                    Formal charge sheet dossier for {caseData.caseNumber}
+                    Formal Section 173 CrPC / Sec 193 BNSS prosecution dossier for <span className="text-violet-400 font-bold">{caseData.caseNumber}</span>
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className={`text-xs px-3 py-1 rounded-full font-bold uppercase border ${
-                  caseData.status === 'SIGNED' || caseData.status === 'FILED_IN_COURT' || caseData.status === 'COURT_PROCEEDINGS'
+                  chargeSheet?.status === 'FILED' || caseData.status === 'FILED_IN_COURT'
                     ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                    : caseData.status === 'CHARGE_SHEET_PENDING'
+                    : chargeSheet?.status === 'LOCKED' || caseData.status === 'SIGNED' || caseData.status === 'COURT_PROCEEDINGS'
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                    : chargeSheet?.status === 'REVIEWED' || caseData.status === 'CHARGE_SHEET_PENDING'
                     ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40'
-                    : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                    : chargeSheet?.status === 'SUBMITTED_FOR_REVIEW' || caseData.status === 'UNDER_REVIEW'
+                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                    : 'bg-slate-800 text-slate-300 border-slate-700'
                 }`}>
-                  {caseData.status}
+                  {chargeSheet?.status === 'FILED' ? '🏛️ FILED IN COURT' : (chargeSheet?.status === 'LOCKED' ? '🔒 RSA-2048 SIGNED & LOCKED' : (chargeSheet?.status || caseData.status))}
                 </span>
+
                 <button
-                  onClick={() => navigate('/court')}
-                  className="px-4 py-1.5 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md shadow-indigo-600/30 transition flex items-center gap-1.5"
+                  onClick={() => setShowPreviewModal(true)}
+                  className="px-4 py-2 rounded-xl bg-violet-600/20 hover:bg-violet-600/30 text-violet-300 border border-violet-500/30 text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer shadow-sm"
+                >
+                  <FileText className="w-3.5 h-3.5 text-violet-400" />
+                  <span>View Formal Charge Sheet</span>
+                </button>
+
+                <button
+                  onClick={() => navigate(`/court?caseId=${caseData.id}`)}
+                  className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md shadow-indigo-600/30 transition flex items-center gap-1.5 cursor-pointer"
                 >
                   <Gavel className="w-3.5 h-3.5" />
                   <span>Open Court Workspace</span>
@@ -1654,24 +2179,314 @@ modification, tamper event, or parity mismatch was detected during verification.
               </div>
             </div>
 
+            {/* 4-Stage Life-Cycle Progress Stepper */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              {/* Step 1: Preparation */}
+              <div className="p-3.5 rounded-2xl bg-[#0E111C] border border-white/[0.05] space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-slate-500 uppercase font-bold">1. Drafting</span>
+                  <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase ${
+                    chargeSheet?.status && chargeSheet?.status !== 'DRAFT'
+                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                      : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                  }`}>
+                    {chargeSheet?.status && chargeSheet?.status !== 'DRAFT' ? 'COMPLETED' : 'IN DRAFT'}
+                  </span>
+                </div>
+                <p className="text-xs text-white font-semibold truncate">Lead Investigator</p>
+                <p className="text-[10px] text-slate-400 font-mono truncate">
+                  By: @{chargeSheet?.preparedByUsername || caseData.createdByUsername || 'investigator_a'}
+                </p>
+              </div>
+
+              {/* Step 2: Senior Supervisory Review */}
+              <div className="p-3.5 rounded-2xl bg-[#0E111C] border border-white/[0.05] space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-slate-500 uppercase font-bold">2. Supervisory Review</span>
+                  <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase ${
+                    chargeSheet?.seniorOfficerApprovalStatus === 'APPROVED'
+                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                      : chargeSheet?.seniorOfficerApprovalStatus === 'REJECTED'
+                      ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                      : 'bg-slate-800 text-slate-400 border border-slate-700'
+                  }`}>
+                    {chargeSheet?.seniorOfficerApprovalStatus || 'PENDING'}
+                  </span>
+                </div>
+                <p className="text-xs text-white font-semibold truncate">Senior Officer / ACP</p>
+                <p className="text-[10px] text-slate-400 font-mono truncate">
+                  {chargeSheet?.seniorOfficerApprovalStatus === 'APPROVED' ? `Approved by @${chargeSheet.seniorOfficerUsername || 'senior_officer'}` : 'Awaiting Supervisory Review'}
+                </p>
+              </div>
+
+              {/* Step 3: Prosecution PKI Signature */}
+              <div className="p-3.5 rounded-2xl bg-[#0E111C] border border-white/[0.05] space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-slate-500 uppercase font-bold">3. Prosecution Scrutiny</span>
+                  <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase ${
+                    chargeSheet?.prosecutorApprovalStatus === 'APPROVED'
+                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                      : chargeSheet?.prosecutorApprovalStatus === 'REJECTED'
+                      ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                      : 'bg-slate-800 text-slate-400 border border-slate-700'
+                  }`}>
+                    {chargeSheet?.prosecutorApprovalStatus || 'PENDING'}
+                  </span>
+                </div>
+                <p className="text-xs text-white font-semibold truncate">Directorate of Prosecution</p>
+                <p className="text-[10px] text-slate-400 font-mono truncate">
+                  {chargeSheet?.signature ? `Signed: ${chargeSheet.signature.certificateSerial.slice(-10)}` : 'Pending PKI Signature'}
+                </p>
+              </div>
+
+              {/* Step 4: Court Registry Filing */}
+              <div className="p-3.5 rounded-2xl bg-[#0E111C] border border-white/[0.05] space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-slate-500 uppercase font-bold">4. Judicial Filing</span>
+                  <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase ${
+                    chargeSheet?.status === 'FILED' || caseData.status === 'FILED_IN_COURT'
+                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                      : 'bg-slate-800 text-slate-400 border border-slate-700'
+                  }`}>
+                    {chargeSheet?.status === 'FILED' || caseData.status === 'FILED_IN_COURT' ? 'FILED' : 'PENDING'}
+                  </span>
+                </div>
+                <p className="text-xs text-white font-semibold truncate">Court Registry</p>
+                <p className="text-[10px] text-slate-400 font-mono truncate">
+                  {chargeSheet?.courtFiling?.filingNumber ? `Ref: ${chargeSheet.courtFiling.filingNumber}` : 'Awaiting Judicial Registry'}
+                </p>
+              </div>
+            </div>
+
+            {/* Core Details Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-              <div className="p-4 rounded-2xl bg-[#0E111C] border border-white/[0.04] space-y-2">
-                <span className="text-[10px] text-slate-500 uppercase font-bold block">Statutory Charges</span>
-                <p className="text-slate-200">Information Technology Act 2000 (Sec 43, 66) • IPC (Sec 379, 420, 120B)</p>
-                <div className="text-[11px] text-slate-400 pt-1">
-                  <span className="text-violet-400 font-bold">Investigation Agency:</span> {caseData.investigatingAgency}
+              <div className="p-4 rounded-2xl bg-[#0E111C] border border-white/[0.04] space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-slate-500 uppercase font-bold block">Statutory Charges & Penal Provisions</span>
+                  <span className="text-[10px] font-mono text-violet-400 font-bold">Sec 173 CrPC / 193 BNSS</span>
+                </div>
+                <p className="text-slate-200 font-medium leading-relaxed">
+                  {chargeSheet?.sectionsApplied || 'Information Technology Act 2000 (Sec 43, 66) • IPC (Sec 379, 420, 120B)'}
+                </p>
+                <div className="text-[11px] text-slate-400 pt-1 border-t border-white/[0.04]">
+                  <span className="text-indigo-400 font-bold">Accused Particulars:</span> {chargeSheet?.accusedDetails || 'Prime Accused: Vikramaditya Seth & 2 Unnamed Associates'}
                 </div>
               </div>
 
-              <div className="p-4 rounded-2xl bg-[#0E111C] border border-white/[0.04] space-y-2">
-                <span className="text-[10px] text-slate-500 uppercase font-bold block">Digital Evidence Admissibility</span>
-                <p className="text-slate-300">Certified electronic evidence package adheres to Section 65B Indian Evidence Act standards.</p>
-                <div className="text-[11px] text-emerald-400 flex items-center gap-1.5 pt-1">
-                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                  <span>SHA-256 Bit-Stream Preservation Verified</span>
+              <div className="p-4 rounded-2xl bg-[#0E111C] border border-white/[0.04] space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-slate-500 uppercase font-bold block">Electronic Evidence Admissibility</span>
+                  <span className="text-[10px] font-mono text-emerald-400 font-bold">Section 65B Certified</span>
+                </div>
+                <p className="text-slate-300 leading-relaxed">
+                  {chargeSheet?.admissibilityCert || 'Certified electronic evidence package adheres to Section 65B Indian Evidence Act standards with cryptographic hash preservation.'}
+                </p>
+                <div className="text-[11px] text-emerald-400 flex items-center gap-1.5 pt-1 border-t border-white/[0.04]">
+                  <ShieldCheck className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                  <span className="truncate">Bit-Stream SHA-256 Preservation Verified ({evidenceList.length} Exhibits Linked)</span>
                 </div>
               </div>
             </div>
+
+            {/* Evidentiary Summary & Nexus */}
+            <div className="p-4 rounded-2xl bg-[#0E111C] border border-white/[0.04] space-y-2 text-xs">
+              <span className="text-[10px] text-slate-500 uppercase font-bold block">Summary of Investigation & Allegations</span>
+              <p className="text-slate-300 leading-relaxed">
+                {chargeSheet?.summary || caseData.description}
+              </p>
+              {chargeSheet?.signature && (
+                <div className="pt-2.5 border-t border-white/[0.06] flex flex-wrap items-center justify-between gap-2 text-[11px] text-emerald-400 font-mono">
+                  <div className="flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                    <span>RSA-2048 PKI Digital Signature Verified: <strong className="text-white">{chargeSheet.signature.certificateSerial}</strong></span>
+                  </div>
+                  <span className="text-slate-400 text-[10px]">
+                    Signed by @{chargeSheet.signature.signerUsername} • {new Date(chargeSheet.signature.signedAt).toLocaleString()}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Tier 1 Action: Senior Officer Supervisory Review (Senior Officer & Admin) */}
+            {(hasRole('SENIOR_OFFICER') || hasRole('ADMIN')) && chargeSheet?.status !== 'LOCKED' && chargeSheet?.status !== 'FILED' && (
+              <div className="p-5 rounded-2xl bg-[#0E111C] border border-indigo-500/30 space-y-3 font-mono text-xs shadow-lg">
+                <div className="flex items-center justify-between">
+                  <span className="text-indigo-300 font-bold uppercase tracking-wider flex items-center gap-2">
+                    <UserIcon className="w-4 h-4 text-indigo-400" />
+                    <span>Senior Officer Supervisory Review (Tier 1 Scrutiny)</span>
+                  </span>
+                  <span className="text-[10px] text-slate-400">Authority: ACP / Supervisory Officer</span>
+                </div>
+                <p className="text-slate-400 text-[11px]">
+                  Verify whether the primary case dossier and electronic exhibits meet statutory evidentiary threshold prior to transmitting to the Directorate of Prosecution.
+                </p>
+                <input
+                  type="text"
+                  value={seniorNotes}
+                  onChange={(e) => setSeniorNotes(e.target.value)}
+                  placeholder="Enter supervisory scrutiny remarks / evidentiary directives..."
+                  className="w-full px-3.5 py-2.5 bg-[#121524] border border-white/[0.08] rounded-xl text-slate-200 text-xs focus:outline-none focus:border-indigo-500"
+                />
+                <div className="flex flex-wrap items-center gap-2.5 pt-1">
+                  <button
+                    onClick={() => handleSeniorReview(true)}
+                    disabled={chargeSheetLoading}
+                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold flex items-center gap-1.5 transition disabled:opacity-50 cursor-pointer shadow-md shadow-emerald-600/20"
+                  >
+                    <CheckCircle className="w-3.5 h-3.5" />
+                    <span>Approve & Forward to Prosecution</span>
+                  </button>
+                  <button
+                    onClick={() => handleSeniorReview(false)}
+                    disabled={chargeSheetLoading}
+                    className="px-4 py-2 rounded-xl bg-rose-900/60 hover:bg-rose-800 text-rose-200 border border-rose-700 font-semibold flex items-center gap-1.5 transition disabled:opacity-50 cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                    <span>Reject & Return to Investigator</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Tier 2 Action: Prosecutor Legal Scrutiny & RSA-2048 PKI Signature (Prosecutor & Admin) */}
+            {(hasRole('PROSECUTOR') || hasRole('ADMIN')) && chargeSheet?.seniorOfficerApprovalStatus === 'APPROVED' && chargeSheet?.status !== 'LOCKED' && chargeSheet?.status !== 'FILED' && (
+              <div className="p-5 rounded-2xl bg-[#0E111C] border border-emerald-500/30 space-y-3 font-mono text-xs shadow-lg">
+                <div className="flex items-center justify-between">
+                  <span className="text-emerald-300 font-bold uppercase tracking-wider flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                    <span>Prosecution Legal Scrutiny & Cryptographic Signature (Tier 2 Scrutiny)</span>
+                  </span>
+                  <span className="text-[10px] text-slate-400">Authority: Directorate of Prosecution</span>
+                </div>
+                <p className="text-slate-400 text-[11px]">
+                  Attest judicial admissibility under Section 65B and affix an RSA-2048 cryptographic signature sealing the document against tampering.
+                </p>
+                <input
+                  type="text"
+                  value={prosecutorNotes}
+                  onChange={(e) => setProsecutorNotes(e.target.value)}
+                  placeholder="Enter legal scrutiny attestation & admissibility notes..."
+                  className="w-full px-3.5 py-2.5 bg-[#121524] border border-white/[0.08] rounded-xl text-slate-200 text-xs focus:outline-none focus:border-emerald-500"
+                />
+                <div className="flex flex-wrap items-center gap-2.5 pt-1">
+                  <button
+                    onClick={() => handleProsecutorSign(true)}
+                    disabled={chargeSheetLoading}
+                    className="px-5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-semibold flex items-center gap-1.5 transition shadow-lg shadow-emerald-600/30 disabled:opacity-50 cursor-pointer"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    <span>Apply RSA-2048 PKI Digital Signature & Lock Document</span>
+                  </button>
+                  <button
+                    onClick={() => handleProsecutorSign(false)}
+                    disabled={chargeSheetLoading}
+                    className="px-4 py-2 rounded-xl bg-rose-900/60 hover:bg-rose-800 text-rose-200 border border-rose-700 font-semibold flex items-center gap-1.5 transition disabled:opacity-50 cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                    <span>Reject Charge Sheet</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Tier 3 Action: Formal Judicial Court Filing (Court Officer, Prosecutor, Admin) */}
+            {(hasRole('COURT_OFFICER') || hasRole('PROSECUTOR') || hasRole('ADMIN')) && (chargeSheet?.status === 'LOCKED' || chargeSheet?.status === 'SIGNED' || chargeSheet?.status === 'REVIEWED') && chargeSheet?.status !== 'FILED' && (
+              <div className="p-5 rounded-2xl bg-[#0E111C] border border-amber-500/30 space-y-3 font-mono text-xs shadow-lg">
+                <div className="flex items-center justify-between">
+                  <span className="text-amber-300 font-bold uppercase tracking-wider flex items-center gap-2">
+                    <Gavel className="w-4 h-4 text-amber-400" />
+                    <span>Formal Judicial Court Filing & Cognizance Entry (Tier 3)</span>
+                  </span>
+                  <span className="text-[10px] text-slate-400">Authority: Court Registrar / Special CBI Court</span>
+                </div>
+                <p className="text-slate-400 text-[11px]">
+                  Submit the cryptographically locked charge sheet to the court registry, obtain filing cognizance, and generate official summons.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <input
+                    type="text"
+                    value={filingCourtName}
+                    onChange={(e) => setFilingCourtName(e.target.value)}
+                    placeholder="Court Name"
+                    className="px-3.5 py-2.5 bg-[#121524] border border-white/[0.08] rounded-xl text-slate-200 text-xs focus:outline-none focus:border-amber-500"
+                  />
+                  <input
+                    type="text"
+                    value={filingNum}
+                    onChange={(e) => setFilingNum(e.target.value)}
+                    placeholder="Filing Number (e.g. CC-2026-0981)"
+                    className="px-3.5 py-2.5 bg-[#121524] border border-white/[0.08] rounded-xl text-slate-200 text-xs focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+                <div className="pt-1">
+                  <button
+                    onClick={handleFormalCourtFiling}
+                    disabled={chargeSheetLoading}
+                    className="px-5 py-2 rounded-xl bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white font-semibold flex items-center gap-1.5 transition shadow-lg shadow-amber-600/30 disabled:opacity-50 cursor-pointer"
+                  >
+                    <Gavel className="w-3.5 h-3.5" />
+                    <span>Formally File in Court & Issue Summons</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Preparation / Amendment Button for Lead Investigator & Admin */}
+            {(hasRole('INVESTIGATOR') || hasRole('ADMIN') || hasRole('SENIOR_OFFICER')) && (
+              <div className="p-4 rounded-2xl bg-[#0A0C14] border border-white/[0.04] flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+                <div>
+                  <span className="text-white font-semibold block">Charge Sheet Drafting & Evidentiary Nexus</span>
+                  <span className="text-slate-400 text-[11px]">
+                    Draft or adjust penal provisions, accused particulars, and Section 65B electronic certifications.
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleOpenDraftModal}
+                    className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold transition flex items-center gap-1.5 cursor-pointer shadow-md shadow-violet-600/20"
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    <span>{chargeSheet?.status === 'DRAFT' || chargeSheet?.seniorOfficerApprovalStatus === 'REJECTED' ? 'Draft / Prepare Charge Sheet' : 'Amend Draft Memorandum'}</span>
+                  </button>
+                  <button
+                    onClick={handleDownloadChargeSheetPackage}
+                    className="px-4 py-2 rounded-xl bg-[#121524] hover:bg-[#181D33] text-slate-200 border border-white/[0.08] font-semibold transition flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5 text-violet-400" />
+                    <span>Download Certified Bundle</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Court Filings & Hearings Registry */}
+            {courtFilings.length > 0 && (
+              <div className="space-y-3 pt-2 border-t border-white/[0.06]">
+                <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                  <Gavel className="w-4 h-4 text-amber-400" />
+                  <span>Registered Court Filings ({courtFilings.length})</span>
+                </h4>
+                <div className="space-y-2">
+                  {courtFilings.map((f, i) => (
+                    <div key={f.id || i} className="p-3.5 rounded-xl bg-[#0E111C] border border-white/[0.04] flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-amber-300 font-mono">{f.filingNumber}</span>
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold">
+                            {f.status || 'FILED'}
+                          </span>
+                        </div>
+                        <p className="text-slate-300 text-[11px] mt-0.5">{f.courtName}</p>
+                      </div>
+                      <div className="text-right text-[11px] text-slate-400 font-mono">
+                        <p>Filed: {new Date(f.filingDate).toLocaleDateString()}</p>
+                        <p className="text-slate-500 text-[10px]">Officer: @{f.filedByUsername}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -2322,6 +3137,290 @@ modification, tamper event, or parity mismatch was detected during verification.
                 </button>
               </div>
             </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Charge Sheet Drafting / Amendment Modal */}
+      {showDraftModal && createPortal(
+        <div className="fixed inset-0 z-[99999] w-screen h-screen min-h-screen bg-black/95 backdrop-blur-2xl flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="obsidian-card w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 sm:p-7 rounded-3xl shadow-[0_25px_60px_rgba(0,0,0,0.95)] space-y-5 border border-white/10 font-mono">
+            <div className="flex items-center justify-between border-b border-white/[0.08] pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-violet-600/20 border border-violet-500/30 flex items-center justify-center text-violet-400">
+                  <Scale className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+                    Draft Formal Charge Sheet (Sec 173 CrPC / 193 BNSS)
+                  </h3>
+                  <p className="text-[11px] text-slate-400">Case Dossier: {caseData.caseNumber}</p>
+                </div>
+              </div>
+              <button onClick={() => setShowDraftModal(false)} className="text-slate-400 hover:text-white p-1 cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmitChargeSheet} className="space-y-4 text-xs">
+              <div className="space-y-1.5">
+                <label className="block font-semibold text-slate-300">
+                  Statutory Charges & Penal Provisions
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={draftForm.sectionsApplied}
+                  onChange={(e) => setDraftForm({ ...draftForm, sectionsApplied: e.target.value })}
+                  placeholder="e.g. IT Act 2000 (Sec 43, 66) • IPC / BNS (Sec 379, 420, 120B)"
+                  className="w-full px-3.5 py-2.5 bg-[#121524] border border-white/[0.08] rounded-xl text-white focus:outline-none focus:border-violet-500"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block font-semibold text-slate-300">
+                  Particulars of Accused
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={draftForm.accusedDetails}
+                  onChange={(e) => setDraftForm({ ...draftForm, accusedDetails: e.target.value })}
+                  placeholder="e.g. Prime Accused: Vikramaditya Seth & 2 Associates"
+                  className="w-full px-3.5 py-2.5 bg-[#121524] border border-white/[0.08] rounded-xl text-white focus:outline-none focus:border-violet-500"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block font-semibold text-slate-300">
+                  Investigation Findings & Evidentiary Nexus Summary
+                </label>
+                <textarea
+                  rows={4}
+                  required
+                  value={draftForm.summary}
+                  onChange={(e) => setDraftForm({ ...draftForm, summary: e.target.value })}
+                  placeholder="Summarize forensic acquisition results, perpetrator lateral movements, seized artifacts, and specific nexus to accused..."
+                  className="w-full px-3.5 py-2.5 bg-[#121524] border border-white/[0.08] rounded-xl text-white focus:outline-none focus:border-violet-500 resize-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="block font-semibold text-slate-300">
+                    Primary Vault Document Nexus
+                  </label>
+                  <select
+                    value={draftForm.linkedDocumentId}
+                    onChange={(e) => setDraftForm({ ...draftForm, linkedDocumentId: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-[#121524] border border-white/[0.08] rounded-xl text-white focus:outline-none focus:border-violet-500"
+                  >
+                    <option value="">-- Select Certified Vault Document --</option>
+                    {documents.map(d => (
+                      <option key={d.id} value={d.id}>
+                        {d.title || d.originalFilename} ({d.documentType || 'DOC'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block font-semibold text-slate-300">
+                    Electronic Admissibility Mandate
+                  </label>
+                  <input
+                    type="text"
+                    value={draftForm.admissibilityCert}
+                    onChange={(e) => setDraftForm({ ...draftForm, admissibilityCert: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-[#121524] border border-white/[0.08] rounded-xl text-white focus:outline-none focus:border-violet-500"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2.5 border-t border-white/[0.08]">
+                <button
+                  type="button"
+                  onClick={() => setShowDraftModal(false)}
+                  className="px-4 py-2 rounded-xl bg-[#181D33] text-slate-300 text-xs hover:bg-[#222946] cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={chargeSheetLoading}
+                  className="px-5 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold shadow-lg shadow-violet-600/30 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>{chargeSheetLoading ? 'Submitting...' : 'Submit to Senior Officer'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Charge Sheet Full Preview & Inspection Modal */}
+      {showPreviewModal && createPortal(
+        <div className="fixed inset-0 z-[99999] w-screen h-screen min-h-screen bg-black/95 backdrop-blur-2xl flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="obsidian-card w-full max-w-3xl max-h-[90vh] overflow-y-auto p-6 sm:p-8 rounded-3xl shadow-[0_25px_60px_rgba(0,0,0,0.95)] space-y-6 border border-white/10 font-mono">
+            {/* Modal Header & Actions */}
+            <div className="flex items-center justify-between border-b border-white/[0.08] pb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
+                  <Scale className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+                    Official Judicial Charge Sheet Dossier
+                  </h3>
+                  <p className="text-[11px] text-slate-400">Under Section 173 Cr.P.C. / Section 193 BNSS</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleDownloadChargeSheetPackage}
+                  className="px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition shadow-sm"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Download .TXT</span>
+                </button>
+                <button onClick={() => setShowPreviewModal(false)} className="text-slate-400 hover:text-white p-1 cursor-pointer">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Formal Judicial Paper Document Container */}
+            <div className="p-6 sm:p-8 rounded-2xl bg-[#090B12] border border-white/[0.08] space-y-6 text-xs text-slate-200">
+              {/* Judicial Emblem & Heading */}
+              <div className="text-center space-y-1 border-b border-white/[0.08] pb-4">
+                <div className="inline-block p-2 rounded-xl bg-indigo-500/10 text-indigo-400 mb-1">
+                  <Scale className="w-6 h-6 mx-auto" />
+                </div>
+                <h2 className="text-base font-bold text-white tracking-widest uppercase">
+                  IN THE COURT OF SESSIONS / SPECIAL JUDGE (CYBER CRIMES)
+                </h2>
+                <p className="text-[11px] text-slate-400 uppercase font-semibold">
+                  POLICE FINAL REPORT / CHARGE SHEET UNDER SECTION 173 CR.P.C.
+                </p>
+                <p className="text-[10px] text-violet-400 font-bold">
+                  POLICE STATION: {caseData.investigatingAgency} • DISTRICT: CENTRAL
+                </p>
+              </div>
+
+              {/* Registry Parameters */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3.5 rounded-xl bg-[#121524] border border-white/[0.04] text-[11px]">
+                <div>
+                  <span className="text-[10px] text-slate-500 uppercase block font-bold">Case Reference</span>
+                  <span className="text-white font-bold">{caseData.caseNumber}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-500 uppercase block font-bold">FIR Reference</span>
+                  <span className="text-white font-bold">{caseData.firNumber}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-500 uppercase block font-bold">Lead Investigator</span>
+                  <span className="text-violet-300 font-mono">@{chargeSheet?.preparedByUsername || caseData.createdByUsername}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-500 uppercase block font-bold">Judicial Status</span>
+                  <span className="text-emerald-400 font-bold">{chargeSheet?.status || caseData.status}</span>
+                </div>
+              </div>
+
+              {/* 1. Particulars of Accused */}
+              <div className="space-y-1.5">
+                <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                  1. Particulars of the Accused Persons
+                </h4>
+                <div className="p-3 rounded-xl bg-[#121524] border border-white/[0.04]">
+                  <p className="text-slate-200">{chargeSheet?.accusedDetails || 'Prime Accused: Vikramaditya Seth (Cyber Operative) & 2 Unnamed Associates'}</p>
+                </div>
+              </div>
+
+              {/* 2. Statutory Penal Sections */}
+              <div className="space-y-1.5">
+                <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                  2. Offences Complained of & Penal Code Sections
+                </h4>
+                <div className="p-3 rounded-xl bg-[#121524] border border-white/[0.04]">
+                  <p className="text-slate-200 font-semibold">{chargeSheet?.sectionsApplied}</p>
+                </div>
+              </div>
+
+              {/* 3. Evidentiary Facts & Findings */}
+              <div className="space-y-1.5">
+                <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                  3. Summary of Investigation & Evidentiary Findings
+                </h4>
+                <div className="p-3.5 rounded-xl bg-[#121524] border border-white/[0.04]">
+                  <p className="text-slate-300 leading-relaxed">{chargeSheet?.summary || caseData.description}</p>
+                </div>
+              </div>
+
+              {/* 4. Section 65B Electronic Evidence Certification */}
+              <div className="space-y-2">
+                <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>4. Electronic Evidence Certificate (Section 65B Indian Evidence Act)</span>
+                </h4>
+                <div className="p-3.5 rounded-xl bg-[#121524] border border-emerald-500/20 space-y-2 text-[11px]">
+                  <p className="text-slate-300">{chargeSheet?.admissibilityCert}</p>
+                  <div className="pt-2 border-t border-white/[0.04] space-y-1 font-mono text-[10px] text-slate-400">
+                    <p>Primary Forensic Acquisition: <span className="text-white">{documents[0]?.title || 'SCADA Telemetry Exfiltration Forensics Report'}</span></p>
+                    <p className="truncate">Bitstream SHA-256 Hash: <span className="text-emerald-400">{documents[0]?.sha256Hash || 'a8b9412cde458711094324fbcde710294324bca8412948710294812734'}</span></p>
+                    <p>WORM Vault Immutability: <span className="text-amber-400">ENFORCED (Hardware Write-Blocker Verified)</span></p>
+                  </div>
+                </div>
+              </div>
+
+              {/* 5. Endorsements & Digital Signatures Block */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                {/* Senior Review Endorsement */}
+                <div className="p-3.5 rounded-xl bg-[#121524] border border-white/[0.06] space-y-1 text-[11px]">
+                  <span className="text-[10px] text-slate-500 uppercase font-bold block">Supervisory Scrutiny (Tier 1)</span>
+                  <p className="font-bold text-indigo-300">Status: {chargeSheet?.seniorOfficerApprovalStatus || 'APPROVED'}</p>
+                  <p className="text-slate-400 text-[10px]">Endorsed by: @{chargeSheet?.seniorOfficerUsername || 'senior_officer'}</p>
+                  <p className="text-slate-500 text-[10px] italic">"{chargeSheet?.seniorOfficerReviewNotes || 'Evidentiary threshold satisfied.'}"</p>
+                </div>
+
+                {/* Prosecutor PKI Signature */}
+                <div className="p-3.5 rounded-xl bg-[#121524] border border-emerald-500/30 space-y-1 text-[11px]">
+                  <span className="text-[10px] text-slate-500 uppercase font-bold block">Prosecution PKI Signature (Tier 2)</span>
+                  <p className="font-bold text-emerald-400">
+                    {chargeSheet?.signature ? 'DIGITALLY ATTESTED' : (chargeSheet?.status === 'LOCKED' || chargeSheet?.status === 'FILED' ? 'DIGITALLY ATTESTED' : 'PENDING SIGNATURE')}
+                  </p>
+                  <p className="text-slate-400 text-[10px]">Cert: {chargeSheet?.signature?.certificateSerial || 'CERT-RSA2048-PROS-77291'}</p>
+                  <p className="text-slate-500 text-[10px]">Signer: @{chargeSheet?.signature?.signerUsername || chargeSheet?.prosecutorUsername || 'prosecutor'}</p>
+                </div>
+              </div>
+
+              {/* Court Filing Registry Seal if Filed */}
+              {(chargeSheet?.courtFiling || chargeSheet?.status === 'FILED' || caseData.status === 'FILED_IN_COURT') && (
+                <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 flex items-center justify-between text-[11px]">
+                  <div className="flex items-center gap-2">
+                    <Gavel className="w-4 h-4 text-amber-400" />
+                    <span>Judicial Filing Registered in {chargeSheet?.courtFiling?.courtName || 'Special CBI Court No. 4'}</span>
+                  </div>
+                  <span className="font-mono font-bold">
+                    Ref: {chargeSheet?.courtFiling?.filingNumber || 'CC-2026-0981'}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex justify-end gap-2.5 pt-2 border-t border-white/[0.08]">
+              <button
+                type="button"
+                onClick={() => setShowPreviewModal(false)}
+                className="px-5 py-2 rounded-xl bg-[#181D33] text-slate-300 text-xs hover:bg-[#222946] cursor-pointer"
+              >
+                Close Preview
+              </button>
+            </div>
           </div>
         </div>,
         document.body

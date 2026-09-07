@@ -173,6 +173,12 @@ export const api = {
     method: 'POST',
     body: JSON.stringify(data),
   }),
+  fileInCourt: (caseId, data) => request(`/cases/${caseId}/court-filing`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
+  getCourtFilings: (caseId) => request(`/cases/${caseId}/court-filings`),
+  getForensicReports: (caseId) => request(`/cases/${caseId}/forensic-reports`),
 
   // Audit Ledger & Security Alerts
   getAuditLogs: () => request('/audit/logs'),
