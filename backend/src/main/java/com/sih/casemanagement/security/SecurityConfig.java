@@ -85,6 +85,7 @@ public class SecurityConfig {
 								.policy("geolocation=(), camera=(), microphone=(), payment=()")))
 				.authorizeHttpRequests(
 						auth -> auth
+								.requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()
 								.requestMatchers("/api/v1/auth/**", "/v3/api-docs/**", "/swagger-ui/**",
 										"/swagger-ui.html", "/actuator/health")
 								.permitAll().anyRequest().authenticated())
@@ -97,13 +98,10 @@ public class SecurityConfig {
 	@Bean
 	public CorsConfigurationSource corsConfigurationSource() {
 		CorsConfiguration config = new CorsConfiguration();
-		List<String> origins = Arrays.stream(allowedOrigins.split(",")).map(String::trim).filter(s -> !s.isEmpty())
-				.toList();
-		config.setAllowedOriginPatterns(origins);
-		config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-		config.setAllowedHeaders(
-				List.of("Authorization", "Content-Type", "X-Requested-With", "Accept", "Origin", "X-CSRF-Token"));
-		config.setExposedHeaders(List.of("Authorization", "Content-Disposition"));
+		config.addAllowedOriginPattern("*");
+		config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"));
+		config.setAllowedHeaders(List.of("*"));
+		config.setExposedHeaders(List.of("Authorization", "Content-Disposition", "Set-Cookie"));
 		config.setAllowCredentials(true);
 		config.setMaxAge(3600L);
 
