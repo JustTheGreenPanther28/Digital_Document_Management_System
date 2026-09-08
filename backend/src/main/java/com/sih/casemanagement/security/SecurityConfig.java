@@ -34,7 +34,7 @@ public class SecurityConfig {
 	private final JwtAuthenticationFilter jwtAuthFilter;
 	private final CustomUserDetailsService userDetailsService;
 
-	@Value("${app.security.cors.allowed-origins:https://digital-document-management-system-nine.vercel.app}")
+	@Value("${app.security.cors.allowed-origins:https://digital-document-management-system-nine.vercel.app,https://digital-document-management-system-nine.vercel.app/,https://*.vercel.app,https://secure-digital-document-management.onrender.com,http://localhost:3000,http://localhost:5173}")
 	private String allowedOrigins;
 
 	public SecurityConfig(JwtAuthenticationFilter jwtAuthFilter, CustomUserDetailsService userDetailsService) {
@@ -76,7 +76,7 @@ public class SecurityConfig {
 						.contentSecurityPolicy(csp -> csp.policyDirectives("default-src 'self'; "
 								+ "script-src 'self'; " + "style-src 'self' https://fonts.googleapis.com; "
 								+ "font-src 'self' https://fonts.gstatic.com data:; " + "img-src 'self' data: blob:; "
-								+ "connect-src 'self' https://digital-document-management-system-nine.vercel.app; "
+								+ "connect-src 'self' https://digital-document-management-system-nine.vercel.app https://*.vercel.app https://secure-digital-document-management.onrender.com http://localhost:* ws://localhost:*; "
 								+ "frame-ancestors 'none'; " + "object-src 'none'; " + "base-uri 'self'; "
 								+ "form-action 'self';"))
 						.referrerPolicy(referrer -> referrer.policy(
