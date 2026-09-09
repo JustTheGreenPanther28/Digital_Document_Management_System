@@ -274,7 +274,7 @@ export const App = () => {
             path="/admin/roles"
             element={
               <ProtectedLayout 
-                allowedRoles={['ADMIN']} 
+                allowedRoles={['ADMIN', 'SENIOR_OFFICER']} 
                 pageTitle="RBAC & Permission Matrix"
               >
                 <RolesAdminPage />

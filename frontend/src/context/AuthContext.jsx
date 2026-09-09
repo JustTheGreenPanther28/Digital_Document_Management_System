@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { api, getAuthToken, setAuthToken, clearAuthToken, getStoredUser, setStoredUser, clearStoredUser } from '../services/api';
+import { checkUserPermission } from '../services/rbacService';
 
 const AuthContext = createContext(null);
 
@@ -248,6 +249,10 @@ export const AuthProvider = ({ children }) => {
     return false;
   };
 
+  const hasPermission = (permissionName) => {
+    return checkUserPermission(user, permissionName);
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -261,6 +266,7 @@ export const AuthProvider = ({ children }) => {
         quickSwitch,
         logout,
         hasRole,
+        hasPermission,
         clearAllAccountLocks,
         setUserLockState,
       }}

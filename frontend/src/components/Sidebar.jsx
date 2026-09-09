@@ -43,7 +43,7 @@ export const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
     { name: 'Retention & Disposal', path: '/retention-disposal', icon: Archive },
     { name: 'Global Search', path: '/search', icon: Search },
     { name: 'User Directory', path: '/admin/users', icon: Users, allowedRoles: ['ADMIN', 'SENIOR_OFFICER'] },
-    { name: 'Role & Permissions', path: '/admin/roles', icon: Key, allowedRoles: ['ADMIN'] },
+    { name: 'Role & Permissions', path: '/admin/roles', icon: Key, allowedRoles: ['ADMIN', 'SENIOR_OFFICER'] },
   ];
 
   // Lower-level officers see all their authorized functions on one single page
