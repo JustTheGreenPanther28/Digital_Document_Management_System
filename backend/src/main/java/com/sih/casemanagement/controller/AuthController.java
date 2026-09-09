@@ -34,6 +34,7 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/auth")
+@CrossOrigin(originPatterns = "*", allowCredentials = "true")
 public class AuthController {
 
 	private final UserRepository userRepository;

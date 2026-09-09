@@ -34,7 +34,7 @@ public class SecurityConfig {
 	private final JwtAuthenticationFilter jwtAuthFilter;
 	private final CustomUserDetailsService userDetailsService;
 
-	@Value("${app.security.cors.allowed-origins:https://digital-document-management-system-nine.vercel.app}")
+	@Value("${app.security.cors.allowed-origins:https://digital-document-management-system-nine.vercel.app,https://digital-document-management-system-nine.vercel.app/,https://*.vercel.app,https://secure-digital-document-management.onrender.com,http://localhost:3000,http://localhost:5173}")
 	private String allowedOrigins;
 
 	public SecurityConfig(JwtAuthenticationFilter jwtAuthFilter, CustomUserDetailsService userDetailsService) {
@@ -76,7 +76,7 @@ public class SecurityConfig {
 						.contentSecurityPolicy(csp -> csp.policyDirectives("default-src 'self'; "
 								+ "script-src 'self'; " + "style-src 'self' https://fonts.googleapis.com; "
 								+ "font-src 'self' https://fonts.gstatic.com data:; " + "img-src 'self' data: blob:; "
-								+ "connect-src 'self' https://digital-document-management-system-nine.vercel.app; "
+								+ "connect-src 'self' https://digital-document-management-system-nine.vercel.app https://*.vercel.app https://secure-digital-document-management.onrender.com http://localhost:* ws://localhost:*; "
 								+ "frame-ancestors 'none'; " + "object-src 'none'; " + "base-uri 'self'; "
 								+ "form-action 'self';"))
 						.referrerPolicy(referrer -> referrer.policy(
@@ -85,6 +85,7 @@ public class SecurityConfig {
 								.policy("geolocation=(), camera=(), microphone=(), payment=()")))
 				.authorizeHttpRequests(
 						auth -> auth
+								.requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()
 								.requestMatchers("/api/v1/auth/**", "/v3/api-docs/**", "/swagger-ui/**",
 										"/swagger-ui.html", "/actuator/health")
 								.permitAll().anyRequest().authenticated())
@@ -97,13 +98,10 @@ public class SecurityConfig {
 	@Bean
 	public CorsConfigurationSource corsConfigurationSource() {
 		CorsConfiguration config = new CorsConfiguration();
-		List<String> origins = Arrays.stream(allowedOrigins.split(",")).map(String::trim).filter(s -> !s.isEmpty())
-				.toList();
-		config.setAllowedOriginPatterns(origins);
-		config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-		config.setAllowedHeaders(
-				List.of("Authorization", "Content-Type", "X-Requested-With", "Accept", "Origin", "X-CSRF-Token"));
-		config.setExposedHeaders(List.of("Authorization", "Content-Disposition"));
+		config.addAllowedOriginPattern("*");
+		config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"));
+		config.setAllowedHeaders(List.of("*"));
+		config.setExposedHeaders(List.of("Authorization", "Content-Disposition", "Set-Cookie"));
 		config.setAllowCredentials(true);
 		config.setMaxAge(3600L);
 
