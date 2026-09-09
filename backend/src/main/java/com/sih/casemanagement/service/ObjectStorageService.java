@@ -41,6 +41,9 @@ public class ObjectStorageService {
     @Value("${app.s3.quarantine-bucket-name:quarantine-vault}")
     private String quarantineBucket;
 
+    @Value("${app.s3.backup-bucket-name:sih190-backup-vault}")
+    private String backupBucket;
+
     @Value("${app.s3.local-fs-fallback:false}")
     private boolean localFsFallback;
 
@@ -63,6 +66,7 @@ public class ObjectStorageService {
             // Check connection and initialize buckets
             ensureBucketExists(defaultBucket);
             ensureBucketExists(quarantineBucket);
+            ensureBucketExists(backupBucket);
             log.info("Successfully connected to MinIO/S3 private object storage at {}", endpoint);
         } catch (Exception e) {
             if (!localFsFallback) {
@@ -75,6 +79,7 @@ public class ObjectStorageService {
             try {
                 Files.createDirectories(Paths.get(localStoragePath, defaultBucket));
                 Files.createDirectories(Paths.get(localStoragePath, quarantineBucket));
+                Files.createDirectories(Paths.get(localStoragePath, backupBucket));
             } catch (IOException ioException) {
                 log.error("Failed to initialize local storage fallback directories", ioException);
             }
@@ -158,7 +163,7 @@ public class ObjectStorageService {
                     }
                 } catch (IOException ignored) {}
             }
-        throw new IllegalStateException("Failed to retrieve object from storage: " + ex.getMessage(), ex);
+            throw new IllegalStateException("Failed to retrieve object from storage: " + ex.getMessage(), ex);
         }
     }
 
@@ -198,6 +203,78 @@ public class ObjectStorageService {
         }
     }
 
+    public java.util.List<String> listObjects(String bucket) {
+        String targetBucket = (bucket != null) ? bucket : defaultBucket;
+        java.util.List<String> keys = new java.util.ArrayList<>();
+
+        if (useLocalFs) {
+            Path bucketPath = Paths.get(localStoragePath, targetBucket);
+            if (Files.exists(bucketPath)) {
+                try (java.util.stream.Stream<Path> stream = Files.walk(bucketPath)) {
+                    stream.filter(Files::isRegularFile).forEach(p -> {
+                        String relative = bucketPath.relativize(p).toString().replace('\\', '/');
+                        keys.add(relative);
+                    });
+                } catch (IOException e) {
+                    log.error("Failed to list files in local fallback storage: {}", e.getMessage());
+                }
+            }
+            return keys;
+        }
+
+        try {
+            ListObjectsV2Request listReq = ListObjectsV2Request.builder().bucket(targetBucket).build();
+            ListObjectsV2Response listRes = s3Client.listObjectsV2(listReq);
+            for (S3Object s3Object : listRes.contents()) {
+                keys.add(s3Object.key());
+            }
+        } catch (Exception ex) {
+            log.error("Failed to list objects in S3 bucket {}: {}", targetBucket, ex.getMessage());
+        }
+        return keys;
+    }
+
+    public boolean objectExists(String bucket, String objectKey) {
+        String targetBucket = (bucket != null) ? bucket : defaultBucket;
+        if (useLocalFs) {
+            Path path = Paths.get(localStoragePath, targetBucket, objectKey);
+            return Files.exists(path);
+        }
+        try {
+            s3Client.headObject(HeadObjectRequest.builder().bucket(targetBucket).key(objectKey).build());
+            return true;
+        } catch (NoSuchKeyException e) {
+            return false;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    public ReplicationResult replicateBucket(String sourceBucket, String targetBucket) {
+        String src = (sourceBucket != null) ? sourceBucket : defaultBucket;
+        String tgt = (targetBucket != null) ? targetBucket : backupBucket;
+        java.util.List<String> objects = listObjects(src);
+        int copiedCount = 0;
+        long totalBytes = 0;
+
+        for (String key : objects) {
+            try {
+                byte[] data = getObject(src, key);
+                storeObject(tgt, key, data);
+                copiedCount++;
+                totalBytes += data.length;
+            } catch (Exception e) {
+                log.warn("Failed replicating object {} from {} to {}: {}", key, src, tgt, e.getMessage());
+            }
+        }
+        return new ReplicationResult(copiedCount, totalBytes, true, 
+            String.format("Replicated %d objects (%d bytes) from %s to %s", copiedCount, totalBytes, src, tgt));
+    }
+
+    public record ReplicationResult(int count, long totalBytes, boolean success, String details) {}
+
     public String getDefaultBucket() { return defaultBucket; }
     public String getQuarantineBucket() { return quarantineBucket; }
+    public String getBackupBucket() { return backupBucket; }
 }
+

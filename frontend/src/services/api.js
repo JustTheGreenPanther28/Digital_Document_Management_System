@@ -1,4 +1,17 @@
-const API_BASE = 'https://secure-digital-document-management.onrender.com/api/v1';
+const getApiBase = () => {
+  if (import.meta.env.VITE_API_URL) {
+    const raw = import.meta.env.VITE_API_URL.replace(/\/$/, '');
+    return raw.endsWith('/api/v1') ? raw : `${raw}/api/v1`;
+  }
+  // When running locally in development, connect to local Spring Boot backend
+  if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+    return 'http://localhost:8080/api/v1';
+  }
+  // Fallback for cloud deployment (e.g. Vercel)
+  return 'https://secure-digital-document-management.onrender.com/api/v1';
+};
+
+const API_BASE = getApiBase();
 
 export const getAuthToken = () => localStorage.getItem('sih_jwt_token');
 export const setAuthToken = (token) => localStorage.setItem('sih_jwt_token', token);
@@ -121,12 +134,17 @@ export const api = {
     body: JSON.stringify({}),
   }),
 
-  // Documents
+  // Documents & Immutable Versions
   getCaseDocuments: (caseId) => request(`/cases/${caseId}/documents`),
   uploadDocument: (caseId, formData) => request(`/cases/${caseId}/documents`, {
     method: 'POST',
     body: formData,
   }),
+  uploadDocumentVersion: (documentId, formData) => request(`/documents/${documentId}/versions`, {
+    method: 'POST',
+    body: formData,
+  }),
+  getDocumentVersions: (documentId) => request(`/documents/${documentId}/versions`),
   downloadDocument: async (documentId, filename) => {
     const res = await request(`/documents/${documentId}/download`);
     const blob = await res.blob();
@@ -139,16 +157,33 @@ export const api = {
     a.remove();
     window.URL.revokeObjectURL(url);
   },
+  downloadDocumentVersion: async (documentId, versionNumber, filename) => {
+    const res = await request(`/documents/${documentId}/versions/${versionNumber}/download`);
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename || `document_v${versionNumber}`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  },
   signDocument: (documentId) => request(`/documents/${documentId}/sign`, {
     method: 'POST',
   }),
 
-  // Evidence & Custody
+  // Evidence & Immutable Versions
   getCaseEvidence: (caseId) => request(`/cases/${caseId}/evidence`),
   registerEvidence: (caseId, data) => request(`/cases/${caseId}/evidence`, {
     method: 'POST',
     body: JSON.stringify(data),
   }),
+  createEvidenceVersion: (evidenceId, data) => request(`/evidence/${evidenceId}/versions`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
+  getEvidenceVersions: (evidenceId) => request(`/evidence/${evidenceId}/versions`),
   initiateCustodyTransfer: (evidenceId, data) => request(`/evidence/${evidenceId}/transfer-request`, {
     method: 'POST',
     body: JSON.stringify(data),
@@ -245,4 +280,37 @@ export const api = {
 
   // Search
   search: (query) => request(`/search?q=${encodeURIComponent(query)}`),
+
+  // Backup & Disaster Recovery Architecture (SIH 190)
+  getBackupStatus: () => request('/backup/status'),
+  getBackupHistory: () => request('/backup/history'),
+  triggerBackup: (type = 'PARALLEL_SYSTEM') => request('/backup/trigger', {
+    method: 'POST',
+    body: JSON.stringify({ type }),
+  }),
+  testRestore: (backupId) => request('/backup/test-restore', {
+    method: 'POST',
+    body: JSON.stringify({ backupId: backupId || '' }),
+  }),
+  downloadBackupUrl: (backupId) => `${API_BASE}/backup/download/${backupId}`,
+
+  // ─── AI Forensic & Evidentiary Scrutiny Analysis ─────────────────────
+  runForensicAnalysis: (forensicReportId) => request(`/ai/analyze/forensic-report/${forensicReportId}`, {
+    method: 'POST',
+  }),
+  runChargeSheetAnalysis: (chargeSheetId) => request(`/ai/analyze/charge-sheet/${chargeSheetId}`, {
+    method: 'POST',
+  }),
+  runCaseAnalysis: (caseId) => request(`/ai/analyze/case/${caseId}`, {
+    method: 'POST',
+  }),
+  getAiResults: (caseId) => request(`/ai/results/case/${caseId}`),
+  getAiResultById: (id) => request(`/ai/results/${id}`),
+  getAiStatus: () => request('/ai/status'),
+  guideChat: (query, language) => request('/ai/guide-chat', {
+    method: 'POST',
+    body: JSON.stringify({ query, language }),
+  }),
 };
+
+export default api;

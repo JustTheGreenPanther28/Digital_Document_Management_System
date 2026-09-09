@@ -114,7 +114,7 @@ export const RolesAdminPage = () => {
             <Key className="w-6 h-6" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-slate-100 tracking-wide font-mono">RBAC & PERMISSION MATRIX</h1>
+            <h1 className="text-2xl font-bold text-slate-100 tracking-tight font-sans">RBAC & PERMISSION MATRIX</h1>
             <p className="text-sm text-slate-400">Granular Role Capability Mapping & Least-Privilege Entitlements</p>
           </div>
         </div>
@@ -123,7 +123,7 @@ export const RolesAdminPage = () => {
           className="flex items-center gap-2 px-3.5 py-2 rounded-lg bg-slate-900 border border-slate-700 hover:bg-slate-800 text-slate-300 text-sm font-medium transition"
         >
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          Refresh
+          Sync Matrix
         </button>
       </div>
 
@@ -134,15 +134,18 @@ export const RolesAdminPage = () => {
         </div>
       )}
 
-      {/* Roles Overview Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {roles.map(r => (
-          <div key={r.id || r.name} className="p-4 rounded-xl border border-slate-800 bg-slate-900/50 space-y-2">
+      {/* Role Badges */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {roles.map((r) => (
+          <div key={r.id || r.name} className="p-4 bg-slate-900/50 border border-slate-800 rounded-xl space-y-2">
             <div className="flex items-center justify-between">
-              <span className="font-mono text-sm font-bold text-blue-400">{r.name}</span>
-              <ShieldCheck className="w-4 h-4 text-emerald-400" />
+              <span className="font-sans text-sm font-bold text-blue-400">{r.name}</span>
+              <Shield className="w-4 h-4 text-slate-500" />
             </div>
-            <p className="text-xs text-slate-400 leading-relaxed">{r.description || 'System standard persona'}</p>
+            <p className="text-xs text-slate-400">{r.description || 'System authorization profile'}</p>
+            <div className="text-[11px] text-slate-500 font-sans">
+              Clearance: <span className="text-slate-300 font-semibold">{r.minClearance || 'RESTRICTED'}</span>
+            </div>
           </div>
         ))}
       </div>
@@ -151,20 +154,20 @@ export const RolesAdminPage = () => {
       <div className="rounded-xl border border-slate-800 bg-slate-900/40 overflow-hidden">
         <div className="p-4 bg-slate-900/80 border-b border-slate-800 flex items-center gap-2">
           <Layers className="w-4 h-4 text-blue-400" />
-          <h2 className="text-sm font-bold text-slate-200 uppercase font-mono tracking-wider">
+          <h2 className="text-sm font-bold text-slate-200 uppercase font-sans tracking-wider">
             Canonical Entitlement Mapping Matrix ({permissions.length} System Permissions)
           </h2>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm text-slate-300">
-            <thead className="bg-slate-950 text-xs font-mono uppercase text-slate-400 border-b border-slate-800">
+            <thead className="bg-slate-950 text-xs font-sans font-semibold uppercase text-slate-300 border-b border-slate-800">
               <tr>
                 <th className="px-6 py-3.5">Permission Name</th>
                 <th className="px-6 py-3.5">Category</th>
                 <th className="px-6 py-3.5">Description</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60 font-mono text-xs">
+            <tbody className="divide-y divide-slate-800/60 font-sans text-xs">
               {permissions.map((p) => (
                 <tr key={p.id || p.name} className="hover:bg-slate-800/30 transition">
                   <td className="px-6 py-3 font-semibold text-slate-200">

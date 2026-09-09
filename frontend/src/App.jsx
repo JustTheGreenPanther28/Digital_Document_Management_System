@@ -17,6 +17,8 @@ import { UsersAdminPage } from './pages/UsersAdminPage';
 import { RolesAdminPage } from './pages/RolesAdminPage';
 import { SecurityAlertsPage } from './pages/SecurityAlertsPage';
 import { RetentionDisposalPage } from './pages/RetentionDisposalPage';
+import { BackupRecoveryPage } from './pages/BackupRecoveryPage';
+import { MultilingualGuideChatbot } from './components/MultilingualGuideChatbot';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -120,6 +122,7 @@ const AccessDeniedView = ({ user, allowedRoles, pageTitle }) => {
 
 const ProtectedLayout = ({ children, allowedRoles, pageTitle }) => {
   const { user, isAuthenticated, loading, hasRole } = useAuth();
+  const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
 
   if (loading) {
     return (
@@ -136,11 +139,11 @@ const ProtectedLayout = ({ children, allowedRoles, pageTitle }) => {
   const isAuthorized = !allowedRoles || allowedRoles.some(role => hasRole(role));
 
   return (
-    <div className="min-h-screen bg-[#08090E] flex flex-col text-slate-100 selection:bg-violet-600 selection:text-white">
-      <Navbar />
-      <div className="flex flex-1">
-        <Sidebar />
-        <main className="flex-1 p-5 md:p-6 overflow-y-auto max-w-7xl mx-auto w-full">
+    <div className="min-h-screen bg-[#08090E] flex flex-col text-slate-100 selection:bg-violet-600 selection:text-white overflow-x-hidden">
+      <Navbar onToggleMobileMenu={() => setMobileMenuOpen(prev => !prev)} isMobileMenuOpen={mobileMenuOpen} />
+      <div className="flex flex-1 relative">
+        <Sidebar isOpen={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} />
+        <main className="flex-1 p-3 sm:p-5 md:p-6 overflow-y-auto max-w-7xl mx-auto w-full min-w-0">
           <ErrorBoundary>
             {isAuthorized ? (
               children
@@ -150,6 +153,8 @@ const ProtectedLayout = ({ children, allowedRoles, pageTitle }) => {
           </ErrorBoundary>
         </main>
       </div>
+      {/* Global Multilingual Legal Guidance Assistant */}
+      <MultilingualGuideChatbot />
     </div>
   );
 };
@@ -292,6 +297,17 @@ export const App = () => {
             element={
               <ProtectedLayout>
                 <RetentionDisposalPage />
+              </ProtectedLayout>
+            }
+          />
+          <Route
+            path="/backup"
+            element={
+              <ProtectedLayout 
+                allowedRoles={['ADMIN', 'AUDITOR', 'SENIOR_OFFICER']} 
+                pageTitle="Automated Backup & Disaster Recovery Vault"
+              >
+                <BackupRecoveryPage />
               </ProtectedLayout>
             }
           />

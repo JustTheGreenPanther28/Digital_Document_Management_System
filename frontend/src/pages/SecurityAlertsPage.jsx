@@ -210,7 +210,7 @@ export const SecurityAlertsPage = () => {
             <ShieldAlert className="w-6 h-6" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-slate-100 tracking-wide font-mono">THREAT INTELLIGENCE & SECURITY ALERTS</h1>
+            <h1 className="text-2xl font-bold text-slate-100 tracking-tight font-sans">THREAT INTELLIGENCE & SECURITY ALERTS</h1>
             <p className="text-xs text-slate-400">Automated Intrusion Detection, Tamper Warnings & Anomaly Interceptions</p>
           </div>
         </div>

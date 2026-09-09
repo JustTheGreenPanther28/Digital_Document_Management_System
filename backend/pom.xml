@@ -25,7 +25,21 @@
 		<googleauth.version>1.5.0</googleauth.version>
 		<bouncycastle.version>1.78.1</bouncycastle.version>
 		<springdoc.version>2.8.5</springdoc.version>
+		<spring-ai.version>1.0.0</spring-ai.version>
 	</properties>
+
+	<dependencyManagement>
+		<dependencies>
+			<!-- Spring AI BOM — manages all spring-ai artifact versions -->
+			<dependency>
+				<groupId>org.springframework.ai</groupId>
+				<artifactId>spring-ai-bom</artifactId>
+				<version>${spring-ai.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
 
 	<dependencies>
 		<!-- Spring Boot Core Starters -->
@@ -130,6 +144,18 @@
 			<groupId>org.springdoc</groupId>
 			<artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
 			<version>${springdoc.version}</version>
+		</dependency>
+
+		<!-- Spring AI — NVIDIA NIM / OpenAI-Compatible Chat Client -->
+		<dependency>
+			<groupId>org.springframework.ai</groupId>
+			<artifactId>spring-ai-starter-model-openai</artifactId>
+		</dependency>
+
+		<!-- Jackson JSR-310 (for Instant / LocalDate JSON serialization in AI responses) -->
+		<dependency>
+			<groupId>com.fasterxml.jackson.datatype</groupId>
+			<artifactId>jackson-datatype-jsr310</artifactId>
 		</dependency>
 
 		<!-- Testing -->

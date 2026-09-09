@@ -231,7 +231,7 @@ export const UsersAdminPage = () => {
               <Users className="w-6 h-6" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-slate-100 tracking-wide font-mono">USER ACCESS & CLEARANCE GOVERNANCE</h1>
+              <h1 className="text-2xl font-bold text-slate-100 tracking-tight font-sans">USER ACCESS & CLEARANCE GOVERNANCE</h1>
               <p className="text-sm text-slate-400">Enterprise User Directory, Clearance Attributes & Lock Control</p>
             </div>
           </div>
@@ -297,7 +297,7 @@ export const UsersAdminPage = () => {
       {/* Users Table */}
       <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-900/40">
         <table className="w-full text-left text-sm text-slate-300">
-          <thead className="bg-slate-900/80 text-xs uppercase tracking-wider text-slate-400 border-b border-slate-800 font-mono">
+          <thead className="bg-slate-900/80 text-xs uppercase tracking-wider text-slate-300 border-b border-slate-800 font-sans font-semibold">
             <tr>
               <th className="px-6 py-3.5">Officer / Identity</th>
               <th className="px-6 py-3.5">Role & Clearance</th>
@@ -413,14 +413,14 @@ export const UsersAdminPage = () => {
       {showCreateModal && createPortal(
         <div className="fixed inset-0 z-[99999] w-screen h-screen min-h-screen flex items-center justify-center bg-black/95 backdrop-blur-2xl p-4 animate-in fade-in duration-150">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
-            <h2 className="text-xl font-bold text-slate-100 font-mono flex items-center gap-2">
+            <h2 className="text-xl font-bold text-slate-100 font-sans flex items-center gap-2">
               <UserPlus className="w-5 h-5 text-blue-400" />
               Provision New Officer Identity
             </h2>
-            <form onSubmit={handleCreateUser} className="space-y-4">
+            <form onSubmit={handleCreateUser} className="space-y-4 font-sans">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-xs font-mono text-slate-400">Username</label>
+                  <label className="text-xs font-medium text-slate-300">Username</label>
                   <input
                     type="text"
                     required
@@ -430,7 +430,7 @@ export const UsersAdminPage = () => {
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-mono text-slate-400">Badge Number</label>
+                  <label className="text-xs font-medium text-slate-300">Badge Number</label>
                   <input
                     type="text"
                     required
@@ -441,7 +441,7 @@ export const UsersAdminPage = () => {
                 </div>
               </div>
               <div>
-                <label className="text-xs font-mono text-slate-400">Full Name & Rank</label>
+                <label className="text-xs font-medium text-slate-300">Full Name & Rank</label>
                 <input
                   type="text"
                   required
@@ -451,7 +451,7 @@ export const UsersAdminPage = () => {
                 />
               </div>
               <div>
-                <label className="text-xs font-mono text-slate-400">Email Address</label>
+                <label className="text-xs font-medium text-slate-300">Email Address</label>
                 <input
                   type="email"
                   required
@@ -461,7 +461,7 @@ export const UsersAdminPage = () => {
                 />
               </div>
               <div>
-                <label className="text-xs font-mono text-slate-400">Password / Digital Passkey</label>
+                <label className="text-xs font-medium text-slate-300">Password / Digital Passkey</label>
                 <input
                   type="password"
                   required
@@ -472,7 +472,7 @@ export const UsersAdminPage = () => {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-xs font-mono text-slate-400">Department / Unit</label>
+                  <label className="text-xs font-medium text-slate-300">Department / Unit</label>
                   <input
                     type="text"
                     required
@@ -482,7 +482,7 @@ export const UsersAdminPage = () => {
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-mono text-slate-400">Security Clearance</label>
+                  <label className="text-xs font-medium text-slate-300">Security Clearance</label>
                   <select
                     value={formData.securityClearance}
                     onChange={(e) => setFormData({ ...formData, securityClearance: e.target.value })}
@@ -498,7 +498,7 @@ export const UsersAdminPage = () => {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-xs font-mono text-slate-400">Jurisdiction / Zone</label>
+                  <label className="text-xs font-medium text-slate-300">Jurisdiction / Zone</label>
                   <input
                     type="text"
                     required
@@ -508,7 +508,7 @@ export const UsersAdminPage = () => {
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-mono text-slate-400">System Role (RBAC)</label>
+                  <label className="text-xs font-medium text-slate-300">System Role (RBAC)</label>
                   <select
                     value={formData.roles[0]}
                     onChange={(e) => setFormData({ ...formData, roles: [e.target.value] })}

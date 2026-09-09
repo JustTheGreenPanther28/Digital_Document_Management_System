@@ -5,11 +5,48 @@
 @layer base {
   body {
     @apply bg-[#08090E] text-slate-100 antialiased;
-    font-family: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, sans-serif;
+    font-family: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    letter-spacing: -0.012em;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
-  code, pre, .font-mono {
-    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
+    letter-spacing: -0.02em;
+  }
+
+  code, pre {
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  }
+
+  /*
+   * Readability safeguard:
+   * Prevent accidental font-mono cascades on container elements from making paragraphs,
+   * headings, labels, form inputs, and descriptions look like difficult-to-read typewriter text.
+   */
+  .font-mono {
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    letter-spacing: -0.01em;
+  }
+
+  .font-mono p, 
+  .font-mono h1, 
+  .font-mono h2, 
+  .font-mono h3, 
+  .font-mono h4, 
+  .font-mono h5, 
+  .font-mono h6, 
+  .font-mono label, 
+  .font-mono textarea, 
+  .font-mono input,
+  .font-mono table,
+  .font-mono td,
+  .font-mono th,
+  .font-mono blockquote {
+    font-family: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, sans-serif;
+    letter-spacing: -0.012em;
   }
 }
 

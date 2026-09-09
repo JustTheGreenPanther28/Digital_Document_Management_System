@@ -7,7 +7,7 @@ export default defineConfig({
     port: 3000,
     proxy: {
       '/api': {
-        target: 'https://secure-digital-document-management.onrender.com',
+        target: 'http://localhost:8080',
         changeOrigin: true,
         secure: false,
       },

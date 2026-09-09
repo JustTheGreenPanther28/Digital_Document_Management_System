@@ -143,4 +143,33 @@ public class DocumentController {
     ) {
         return ResponseEntity.ok(documentService.getVersionHistory(documentId));
     }
+
+    @GetMapping("/documents/{documentId}/versions/{versionNumber}/download")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<Resource> downloadDocumentVersion(
+        @PathVariable UUID documentId,
+        @PathVariable int versionNumber,
+        @AuthenticationPrincipal UserPrincipal principal,
+        HttpServletRequest httpRequest
+    ) {
+        String clientKey = principal != null ? "download:user:" + principal.getId() : "download:ip:" + httpRequest.getRemoteAddr();
+        if (!rateLimitingService.isAllowed(clientKey, 60, 60)) {
+            throw new RateLimitExceededException("Download rate limit exceeded. Maximum 60 downloads per minute allowed.");
+        }
+
+        User user = userRepository.findById(principal.getId()).orElseThrow();
+        DocumentService.DownloadPayload payload = documentService.downloadDocumentVersion(documentId, versionNumber, user, httpRequest.getRemoteAddr());
+
+        ByteArrayResource resource = new ByteArrayResource(payload.data());
+        String safeFilename = payload.filename().replaceAll("[\\r\\n\\f]", "_");
+        org.springframework.http.ContentDisposition contentDisposition = org.springframework.http.ContentDisposition.attachment()
+            .filename(safeFilename, java.nio.charset.StandardCharsets.UTF_8)
+            .build();
+
+        return ResponseEntity.ok()
+            .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition.toString())
+            .contentType(MediaType.parseMediaType(payload.mimeType()))
+            .contentLength(payload.data().length)
+            .body(resource);
+    }
 }

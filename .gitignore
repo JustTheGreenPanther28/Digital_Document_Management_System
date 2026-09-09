@@ -86,3 +86,5 @@ Thumbs.db
 *.sublime-workspace
 .gemini/
 scratch/
+.settings/
+*.prefs

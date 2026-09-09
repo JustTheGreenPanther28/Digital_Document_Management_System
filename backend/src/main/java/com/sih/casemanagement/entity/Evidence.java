@@ -66,6 +66,9 @@ public class Evidence {
     @JoinColumn(name = "associated_document_id")
     private Document associatedDocument;
 
+    @Column(name = "current_version", nullable = false)
+    private int currentVersion = 1;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
@@ -127,6 +130,9 @@ public class Evidence {
 
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
+
+    public int getCurrentVersion() { return currentVersion; }
+    public void setCurrentVersion(int currentVersion) { this.currentVersion = currentVersion; }
 
     public Instant getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(Instant updatedAt) { this.updatedAt = updatedAt; }

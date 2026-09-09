@@ -334,6 +334,85 @@ public class DocumentService {
         return new DownloadPayload(doc.getOriginalFilename(), doc.getMimeType(), decryptedBytes);
     }
 
+    @Transactional
+    public DownloadPayload downloadDocumentVersion(UUID documentId, int versionNumber, User user, String ipAddress) {
+        abacSecurity.checkDocumentAccess(documentId, "READ");
+
+        Document doc = documentRepository.findById(documentId)
+            .orElseThrow(() -> new ResourceNotFoundException("Document not found: " + documentId));
+
+        if (doc.getQuarantineStatus() == QuarantineStatus.QUARANTINED) {
+            throw new SecurityValidationException("Document is quarantined due to security violation and cannot be accessed.");
+        }
+
+        DocumentVersion version = versionRepository.findByDocumentIdAndVersionNumber(documentId, versionNumber)
+            .orElseThrow(() -> new ResourceNotFoundException("Document version v" + versionNumber + " not found for document: " + documentId));
+
+        threatDetectionService.recordDownload(user.getId(), user.getUsername(), ipAddress, doc.getId(), doc.getCase().getId());
+
+        // Retrieve encrypted ciphertext for this specific version from MinIO/S3
+        byte[] encryptedData = storageService.getObject(storageService.getDefaultBucket(), version.getStorageObjectKey());
+
+        // Decrypt with AES-256-GCM using IV and KMS key
+        byte[] iv = Base64.getDecoder().decode(version.getEncryptionIv());
+        byte[] decryptedBytes = encryptionService.decrypt(encryptedData, iv);
+
+        // Cryptographic SHA-256 Tamper Verification against this version's recorded hash
+        String recalculatedHash = FileValidationService.calculateSha256(decryptedBytes);
+        if (!recalculatedHash.equalsIgnoreCase(version.getSha256Hash())) {
+            log.error("CRITICAL TAMPER DETECTED on v{}: Recalculated hash {} does not match stored hash {} for document {}",
+                versionNumber, recalculatedHash, version.getSha256Hash(), doc.getId());
+
+            SecurityAlert alert = new SecurityAlert(
+                "TAMPER_DETECTED",
+                AlertSeverity.CRITICAL,
+                "Cryptographic integrity verification failed for document version v" + versionNumber + ": " + doc.getTitle(),
+                ipAddress,
+                user.getUsername(),
+                doc.getCase().getId()
+            );
+            alertRepository.save(alert);
+
+            auditService.logEvent(
+                AuditEventType.TAMPER_DETECTED,
+                user.getId(),
+                user.getUsername(),
+                user.getRoles().iterator().next().getName().name(),
+                doc.getCase().getId(),
+                "DOCUMENT_VERSION",
+                doc.getId() + "_v" + versionNumber,
+                ipAddress,
+                null,
+                "CRITICAL: Integrity verification failed during historical version retrieval. Access blocked."
+            );
+
+            throw new TamperException("Integrity check failed: Decrypted document version v" + versionNumber + " hash does not match original digital fingerprint.");
+        }
+
+        auditService.logEvent(
+            AuditEventType.DOCUMENT_DOWNLOADED,
+            user.getId(),
+            user.getUsername(),
+            user.getRoles().iterator().next().getName().name(),
+            doc.getCase().getId(),
+            "DOCUMENT_VERSION",
+            doc.getId() + "_v" + versionNumber,
+            ipAddress,
+            null,
+            "Successfully verified SHA-256 integrity and downloaded document version v" + versionNumber + ": " + doc.getTitle()
+        );
+
+        String versionFilename = doc.getOriginalFilename();
+        int dotIdx = versionFilename.lastIndexOf('.');
+        if (dotIdx > 0) {
+            versionFilename = versionFilename.substring(0, dotIdx) + "_v" + versionNumber + versionFilename.substring(dotIdx);
+        } else {
+            versionFilename = versionFilename + "_v" + versionNumber;
+        }
+
+        return new DownloadPayload(versionFilename, doc.getMimeType(), decryptedBytes);
+    }
+
     @Transactional(readOnly = true)
     public List<Document> getDocumentsForCase(UUID caseId) {
         abacSecurity.checkCaseAccess(caseId, "READ");

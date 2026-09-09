@@ -1,5 +1,6 @@
 package com.sih.casemanagement.service;
 
+import com.sih.casemanagement.common.enums.CaseStatus;
 import com.sih.casemanagement.common.enums.AuditEventType;
 import com.sih.casemanagement.common.enums.EvidenceStatus;
 import com.sih.casemanagement.common.enums.EvidenceType;
@@ -23,6 +24,7 @@ import java.util.UUID;
 public class EvidenceAndCustodyService {
 
     private final EvidenceRepository evidenceRepository;
+    private final EvidenceVersionRepository evidenceVersionRepository;
     private final CustodyRecordRepository custodyRecordRepository;
     private final EvidenceTransferRepository transferRepository;
     private final CaseRepository caseRepository;
@@ -32,6 +34,7 @@ public class EvidenceAndCustodyService {
 
     public EvidenceAndCustodyService(
         EvidenceRepository evidenceRepository,
+        EvidenceVersionRepository evidenceVersionRepository,
         CustodyRecordRepository custodyRecordRepository,
         EvidenceTransferRepository transferRepository,
         CaseRepository caseRepository,
@@ -40,6 +43,7 @@ public class EvidenceAndCustodyService {
         AbacSecurityService abacSecurity
     ) {
         this.evidenceRepository = evidenceRepository;
+        this.evidenceVersionRepository = evidenceVersionRepository;
         this.custodyRecordRepository = custodyRecordRepository;
         this.transferRepository = transferRepository;
         this.caseRepository = caseRepository;
@@ -85,6 +89,24 @@ public class EvidenceAndCustodyService {
         evidence.setCurrentCustodian(initialCustodian != null ? initialCustodian : collectingOfficer);
 
         Evidence saved = evidenceRepository.save(evidence);
+
+        // Record initial immutable version v1 snapshot
+        EvidenceVersion v1 = new EvidenceVersion(
+            saved,
+            1,
+            saved.getTitle(),
+            saved.getDescription(),
+            saved.getEvidenceType(),
+            saved.getSealNumber(),
+            saved.isSealIntact(),
+            saved.getStorageLocation(),
+            saved.getSeizureLocation(),
+            saved.getStatus(),
+            saved.getCurrentCustodian(),
+            "Initial Seizure & Intake Registration (v1)",
+            collectingOfficer
+        );
+        evidenceVersionRepository.save(v1);
 
         // Append initial INTAKE custody record
         CustodyRecord intake = new CustodyRecord(
@@ -339,5 +361,103 @@ public class EvidenceAndCustodyService {
     @Transactional(readOnly = true)
     public List<EvidenceTransfer> getPendingTransfersForUser(UUID userId) {
         return transferRepository.findByRecipientIdAndStatus(userId, TransferStatus.PENDING);
+    }
+
+    @Transactional
+    public Evidence createEvidenceVersion(
+        UUID evidenceId,
+        String title,
+        String description,
+        EvidenceType evidenceType,
+        String sealNumber,
+        Boolean sealIntact,
+        String storageLocation,
+        String seizureLocation,
+        EvidenceStatus status,
+        UUID custodianId,
+        String changeReason,
+        User modifier,
+        String ipAddress
+    ) {
+        Evidence evidence = evidenceRepository.findById(evidenceId)
+            .orElseThrow(() -> new ResourceNotFoundException("Evidence not found: " + evidenceId));
+
+        abacSecurity.checkCaseAccess(evidence.getCase().getId(), "REGISTER_EVIDENCE");
+
+        if (evidence.getCase().getStatus() == CaseStatus.CLOSED || evidence.getCase().getStatus() == CaseStatus.ARCHIVED) {
+            throw new WorkflowViolationException("Cannot amend evidence: Case dossier is locked/closed.");
+        }
+
+        int nextVersion = evidence.getCurrentVersion() + 1;
+
+        if (title != null && !title.isBlank()) evidence.setTitle(title);
+        if (description != null) evidence.setDescription(description);
+        if (evidenceType != null) evidence.setEvidenceType(evidenceType);
+        if (sealNumber != null && !sealNumber.isBlank()) evidence.setSealNumber(sealNumber);
+        if (sealIntact != null) evidence.setSealIntact(sealIntact);
+        if (storageLocation != null && !storageLocation.isBlank()) evidence.setStorageLocation(storageLocation);
+        if (seizureLocation != null && !seizureLocation.isBlank()) evidence.setSeizureLocation(seizureLocation);
+        if (status != null) evidence.setStatus(status);
+
+        if (custodianId != null) {
+            User newCustodian = userRepository.findById(custodianId).orElse(evidence.getCurrentCustodian());
+            evidence.setCurrentCustodian(newCustodian);
+        }
+
+        evidence.setCurrentVersion(nextVersion);
+        Evidence updated = evidenceRepository.save(evidence);
+
+        EvidenceVersion snapshot = new EvidenceVersion(
+            updated,
+            nextVersion,
+            updated.getTitle(),
+            updated.getDescription(),
+            updated.getEvidenceType(),
+            updated.getSealNumber(),
+            updated.isSealIntact(),
+            updated.getStorageLocation(),
+            updated.getSeizureLocation(),
+            updated.getStatus(),
+            updated.getCurrentCustodian(),
+            changeReason != null && !changeReason.isBlank() ? changeReason : "Evidence State Amendment v" + nextVersion,
+            modifier
+        );
+        evidenceVersionRepository.save(snapshot);
+
+        // Also record a custody record entry capturing version transition
+        CustodyRecord custodyLog = new CustodyRecord(
+            updated,
+            updated.getCase(),
+            "VERSION_AMENDMENT_V" + nextVersion,
+            modifier,
+            updated.getCurrentCustodian(),
+            updated.getSealNumber(),
+            updated.isSealIntact(),
+            "Evidence state amended to v" + nextVersion + ": " + snapshot.getChangeReason(),
+            "SEAL-VERIFIED-" + updated.getSealNumber()
+        );
+        custodyRecordRepository.save(custodyLog);
+
+        auditService.logEvent(
+            AuditEventType.EVIDENCE_VERSION_CREATED,
+            modifier.getId(),
+            modifier.getUsername(),
+            modifier.getRoles().iterator().next().getName().name(),
+            updated.getCase().getId(),
+            "EVIDENCE_VERSION",
+            String.valueOf(nextVersion),
+            ipAddress,
+            null,
+            String.format("Created evidence version v%d for %s. Reason: %s",
+                nextVersion, updated.getEvidenceNumber(), snapshot.getChangeReason())
+        );
+
+        return updated;
+    }
+
+    @Transactional(readOnly = true)
+    public List<EvidenceVersion> getEvidenceVersionHistory(UUID evidenceId) {
+        abacSecurity.checkEvidenceAccess(evidenceId, "READ");
+        return evidenceVersionRepository.findByEvidenceIdOrderByVersionNumberDesc(evidenceId);
     }
 }

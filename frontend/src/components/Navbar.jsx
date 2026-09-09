@@ -23,15 +23,17 @@ import {
   FileText,
   ArrowRight,
   Sparkles,
-  ArrowUpRight
+  ArrowUpRight,
+  Menu
 } from 'lucide-react';
 
-export const Navbar = () => {
+export const Navbar = ({ onToggleMobileMenu = () => {}, isMobileMenuOpen = false }) => {
   const { user, quickSwitch, logout, hasRole } = useAuth();
   const navigate = useNavigate();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const searchInputRef = useRef(null);
   const searchContainerRef = useRef(null);
   const dropdownRef = useRef(null);
@@ -182,12 +184,22 @@ export const Navbar = () => {
       {/* Top subtle cyber glow hairline to define the top edge cleanly */}
       <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-violet-500/30 to-transparent pointer-events-none" />
 
-      {/* 1. Left Brand Identity */}
-      <div className="flex items-center gap-3">
-        <Link to="/dashboard" className="flex items-center gap-2.5 group focus:outline-none">
+      {/* 1. Left Brand Identity & Mobile Hamburger Menu */}
+      <div className="flex items-center gap-2 sm:gap-3">
+        {/* Mobile Hamburger Menu Toggle */}
+        <button
+          type="button"
+          onClick={onToggleMobileMenu}
+          className="p-2 -ml-1.5 rounded-xl text-slate-300 hover:text-white hover:bg-[#141829] border border-transparent hover:border-white/[0.08] transition md:hidden focus:outline-none cursor-pointer"
+          aria-label="Toggle navigation drawer"
+        >
+          {isMobileMenuOpen ? <X className="w-5 h-5 text-violet-400" /> : <Menu className="w-5 h-5" />}
+        </button>
+
+        <Link to="/dashboard" className="flex items-center gap-2 sm:gap-2.5 group focus:outline-none">
           {/* Glowing Biometric Cyber Badge */}
           <div className="relative">
-            <div className="w-9 h-9 rounded-xl bg-[#0D1020] border border-violet-500/40 p-1 flex items-center justify-center shadow-lg shadow-violet-600/30 group-hover:scale-105 group-hover:border-violet-400/70 transition duration-200 overflow-hidden">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-[#0D1020] border border-violet-500/40 p-1 flex items-center justify-center shadow-lg shadow-violet-600/30 group-hover:scale-105 group-hover:border-violet-400/70 transition duration-200 overflow-hidden">
               <img 
                 src="/logo-icon.png" 
                 alt="NDCMS" 
@@ -198,8 +210,8 @@ export const Navbar = () => {
           </div>
 
           <div>
-            <div className="flex items-center gap-2">
-              <span className="font-extrabold text-base tracking-wider bg-gradient-to-r from-white via-slate-100 to-cyan-300 bg-clip-text text-transparent font-mono">
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <span className="font-extrabold text-sm sm:text-base tracking-wider bg-gradient-to-r from-white via-slate-100 to-cyan-300 bg-clip-text text-transparent font-mono">
                 NDCMS
               </span>
               <span className="hidden sm:inline-flex items-center gap-1 text-[9px] px-2 py-0.5 rounded-full font-mono font-bold uppercase tracking-wider bg-violet-500/15 text-violet-300 border border-violet-500/30">
@@ -207,7 +219,7 @@ export const Navbar = () => {
                 Zero-Trust Vault
               </span>
             </div>
-            <p className="text-[10px] text-slate-400 font-medium hidden md:block">
+            <p className="text-[10px] text-slate-400 font-medium hidden lg:block">
               National Digital Case & Evidence Management Platform
             </p>
           </div>
@@ -215,7 +227,7 @@ export const Navbar = () => {
       </div>
 
       {/* 2. Center Search Command Bar */}
-      <div ref={searchContainerRef} className="flex-1 max-w-md mx-4 hidden md:block relative">
+      <div ref={searchContainerRef} className="flex-1 max-w-xs md:max-w-xs lg:max-w-sm xl:max-w-md mx-2 sm:mx-3 hidden md:block relative">
         <form onSubmit={handleSearchSubmit} className="relative">
           <div className="relative flex items-center">
             <Search className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none" />
@@ -303,7 +315,17 @@ export const Navbar = () => {
       </div>
 
       {/* 3. Right Action Buttons & Officer Profile Dropdown */}
-      <div className="flex items-center gap-2.5 sm:gap-3">
+      <div className="flex items-center gap-2 sm:gap-3">
+        {/* Mobile Search Trigger Button */}
+        <button
+          type="button"
+          onClick={() => setMobileSearchOpen(!mobileSearchOpen)}
+          className="w-8 h-8 rounded-full bg-[#141829] hover:bg-[#1A2035] border border-white/[0.08] text-slate-300 hover:text-white flex items-center justify-center transition md:hidden cursor-pointer"
+          aria-label="Toggle mobile search bar"
+        >
+          <Search className="w-4 h-4 text-slate-400" />
+        </button>
+
         {/* Register Case Action Pill (Only for Senior Officers, Investigators, Admins) */}
         {canCreateCase && (
           <button
@@ -312,22 +334,36 @@ export const Navbar = () => {
               navigate('/cases?new=true', { state: { openModal: true } });
               window.dispatchEvent(new CustomEvent('open-new-dossier-modal'));
             }}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-semibold text-xs transition shadow-lg shadow-violet-600/30 border border-violet-400/30 group cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 sm:px-3.5 sm:py-1.5 rounded-full bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-semibold text-xs transition shadow-lg shadow-violet-600/30 border border-violet-400/30 group cursor-pointer"
           >
             <FolderPlus className="w-3.5 h-3.5 text-violet-200 group-hover:scale-110 transition" />
             <span className="hidden sm:inline-block">New Dossier</span>
-            <Lock className="w-2.5 h-2.5 text-violet-300 ml-0.5" />
+            <Lock className="w-2.5 h-2.5 text-violet-300 ml-0.5 hidden sm:inline-block" />
           </button>
         )}
+
+        {/* Multilingual Legal AI Guide Button (Saarthi) */}
+        <button
+          type="button"
+          onClick={() => window.dispatchEvent(new CustomEvent('toggle-nyayasahayak-guide'))}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-1.5 rounded-full bg-gradient-to-r from-cyan-600/20 via-violet-600/25 to-indigo-600/25 hover:from-cyan-500/35 hover:to-violet-500/35 border border-cyan-400/40 hover:border-cyan-300 text-cyan-200 hover:text-white font-semibold text-xs transition shadow-md shadow-cyan-950/30 group cursor-pointer"
+          title="Saarthi: Multilingual User Guidance & Workflow Assistant (10 Indian Languages)"
+        >
+          <Sparkles className="w-3.5 h-3.5 text-cyan-300 animate-pulse group-hover:rotate-12 transition" />
+          <span className="hidden sm:inline-block font-bold">Saarthi</span>
+          <span className="text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold bg-cyan-400/20 text-cyan-300 border border-cyan-400/30">
+            🇮🇳 सारथी
+          </span>
+        </button>
 
         {/* Threat Alert Notification Bell - Only shown to Admin, Auditor, Senior Officer */}
         {canViewAlerts && (
           <Link
             to="/security-alerts"
-            className="relative w-9 h-9 rounded-full bg-[#141829] hover:bg-[#1A2035] border border-white/[0.08] hover:border-violet-500/40 text-slate-300 hover:text-white flex items-center justify-center transition group shadow-sm flex-shrink-0"
+            className="relative w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-[#141829] hover:bg-[#1A2035] border border-white/[0.08] hover:border-violet-500/40 text-slate-300 hover:text-white flex items-center justify-center transition group shadow-sm flex-shrink-0"
             title="Threat Intelligence & Security Alerts"
           >
-            <Bell className="w-4 h-4 text-slate-400 group-hover:text-violet-300 transition" />
+            <Bell className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-400 group-hover:text-violet-300 transition" />
             <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] px-1 items-center justify-center rounded-full bg-violet-600 border-2 border-[#08090E] text-[9px] font-mono font-black text-white shadow-md shadow-violet-900/60">
               2
             </span>
@@ -338,7 +374,7 @@ export const Navbar = () => {
         <div className="relative" ref={dropdownRef}>
           <button
             onClick={() => setDropdownOpen(!dropdownOpen)}
-            className="flex items-center gap-2 px-2.5 py-1.5 rounded-full bg-[#141829] hover:bg-[#1A2035] border border-white/[0.08] hover:border-violet-500/40 transition duration-200 group shadow-lg"
+            className="flex items-center gap-1.5 sm:gap-2 px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-full bg-[#141829] hover:bg-[#1A2035] border border-white/[0.08] hover:border-violet-500/40 transition duration-200 group shadow-lg cursor-pointer"
           >
             {/* Avatar */}
             <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-violet-600 to-indigo-500 flex items-center justify-center text-[10px] font-bold text-white shadow-sm ring-1 ring-white/20">
@@ -353,7 +389,7 @@ export const Navbar = () => {
               <span className="text-[9px] font-mono px-1.5 py-0.2 rounded-full font-bold uppercase tracking-wider bg-violet-500/20 text-violet-300 border border-violet-500/30">
                 {user?.clearance || 'PRO'}
               </span>
-              <span className="text-xs font-semibold text-slate-200 hidden lg:inline-block max-w-[110px] truncate ml-0.5">
+              <span className="text-xs font-semibold text-slate-200 hidden lg:inline-block max-w-[80px] xl:max-w-[110px] truncate ml-0.5">
                 {user?.fullName || user?.username}
               </span>
             </div>
@@ -363,7 +399,7 @@ export const Navbar = () => {
 
           {/* Solid Opaque Interactive Fast Persona / Role Switcher Popover */}
           {dropdownOpen && (
-            <div className="absolute right-0 mt-2.5 w-84 sm:w-96 bg-[#0C0E1A] border border-white/[0.12] rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.95)] p-4 z-50 divide-y divide-white/[0.07] animate-in fade-in slide-in-from-top-2 duration-150">
+            <div className="absolute right-0 mt-2.5 w-[calc(100vw-1.5rem)] max-w-sm bg-[#0C0E1A] border border-white/[0.12] rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.95)] p-4 z-50 divide-y divide-white/[0.07] animate-in fade-in slide-in-from-top-2 duration-150">
               {/* Profile Card Header */}
               <div className="pb-3 px-1">
                 <div className="flex items-center justify-between mb-2">
@@ -493,6 +529,32 @@ export const Navbar = () => {
           )}
         </div>
       </div>
+
+      {/* Mobile Expandable Search Bar */}
+      {mobileSearchOpen && (
+        <div className="absolute top-14 left-0 right-0 p-3 bg-[#0C0E1A] border-b border-white/[0.1] shadow-2xl md:hidden animate-in slide-in-from-top duration-150 z-30">
+          <form onSubmit={(e) => { handleSearchSubmit(e); setMobileSearchOpen(false); }} className="relative flex items-center">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 pointer-events-none" />
+            <input
+              type="text"
+              value={searchQuery}
+              autoFocus
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search cases, evidence, FIR, hash..."
+              className="w-full bg-[#141829] border border-white/[0.12] focus:border-violet-500 rounded-xl pl-9 pr-10 py-2 text-xs text-white placeholder-slate-500 focus:outline-none shadow-inner"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 text-slate-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </form>
+        </div>
+      )}
     </header>
   );
 };

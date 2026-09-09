@@ -32,6 +32,10 @@ export default {
           amber: '#F59E0B',
         }
       },
+      fontFamily: {
+        sans: ['"Plus Jakarta Sans"', 'Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', 'sans-serif'],
+        mono: ['"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
+      },
       boxShadow: {
         'glow-violet': '0 0 25px -5px rgba(139, 92, 246, 0.4)',
         'glow-cyan': '0 0 25px -5px rgba(6, 182, 212, 0.4)',

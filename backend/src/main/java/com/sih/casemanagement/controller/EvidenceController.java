@@ -140,4 +140,39 @@ public class EvidenceController {
     ) {
         return ResponseEntity.ok(evidenceService.getPendingTransfersForUser(principal.getId()));
     }
+
+    @PostMapping("/evidence/{evidenceId}/versions")
+    @PreAuthorize("hasAnyRole('INVESTIGATOR', 'EVIDENCE_CUSTODIAN', 'FORENSIC_OFFICER', 'SENIOR_OFFICER', 'ADMIN')")
+    public ResponseEntity<Evidence> createEvidenceVersion(
+        @PathVariable UUID evidenceId,
+        @Valid @RequestBody com.sih.casemanagement.dto.EvidenceVersionRequest request,
+        @AuthenticationPrincipal UserPrincipal principal,
+        HttpServletRequest httpRequest
+    ) {
+        User modifier = userRepository.findById(principal.getId()).orElseThrow();
+        Evidence updated = evidenceService.createEvidenceVersion(
+            evidenceId,
+            request.title(),
+            request.description(),
+            request.evidenceType(),
+            request.sealNumber(),
+            request.sealIntact(),
+            request.storageLocation(),
+            request.seizureLocation(),
+            request.status(),
+            request.custodianUserId(),
+            request.changeReason(),
+            modifier,
+            httpRequest.getRemoteAddr()
+        );
+        return ResponseEntity.ok(updated);
+    }
+
+    @GetMapping("/evidence/{evidenceId}/versions")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<List<com.sih.casemanagement.entity.EvidenceVersion>> getEvidenceVersions(
+        @PathVariable UUID evidenceId
+    ) {
+        return ResponseEntity.ok(evidenceService.getEvidenceVersionHistory(evidenceId));
+    }
 }
