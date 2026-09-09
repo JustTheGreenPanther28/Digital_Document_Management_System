@@ -590,30 +590,66 @@ export const DashboardPage = () => {
                 </div>
               </div>
 
-              {/* Glowing SVG Wave Sparkline */}
+              {/* Cryptographic Hash-Chain Verification Stream */}
               <div className="mt-4 relative h-16 w-full">
-                <svg className="w-full h-full overflow-visible" viewBox="0 0 200 60" preserveAspectRatio="none">
+                <svg className="w-full h-full overflow-visible" viewBox="0 0 220 60" preserveAspectRatio="none">
                   <defs>
-                    <linearGradient id="wave1" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#8B5CF6" stopOpacity="0.4" />
+                    <linearGradient id="ledgerGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#8B5CF6" stopOpacity="0.35" />
                       <stop offset="100%" stopColor="#8B5CF6" stopOpacity="0.0" />
                     </linearGradient>
+                    <linearGradient id="chainLineGrad" x1="0" y1="0" x2="1" y2="0">
+                      <stop offset="0%" stopColor="#06B6D4" />
+                      <stop offset="50%" stopColor="#8B5CF6" />
+                      <stop offset="100%" stopColor="#A855F7" />
+                    </linearGradient>
                   </defs>
+                  {/* Grid / Ledger Block Guideline */}
+                  <line x1="0" y1="36" x2="220" y2="36" stroke="rgba(255,255,255,0.06)" strokeDasharray="3 3" strokeWidth="1" />
+                  
+                  {/* Area fill under verified blocks */}
                   <path
-                    d="M 0 45 Q 40 55, 80 35 T 140 20 T 200 30"
+                    d="M 15 36 L 55 36 L 95 26 L 140 26 L 185 16 L 210 16 L 210 60 L 15 60 Z"
+                    fill="url(#ledgerGrad)"
+                  />
+                  {/* Inter-block cryptographic hash link line */}
+                  <path
+                    d="M 15 36 L 55 36 L 95 26 L 140 26 L 185 16 L 210 16"
                     fill="none"
-                    stroke="#8B5CF6"
+                    stroke="url(#chainLineGrad)"
                     strokeWidth="2.5"
-                    className="wave-glow"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
                   />
-                  <path
-                    d="M 0 45 Q 40 55, 80 35 T 140 20 T 200 30 L 200 60 L 0 60 Z"
-                    fill="url(#wave1)"
-                  />
-                  <circle cx="140" cy="20" r="3.5" fill="#8B5CF6" className="animate-pulse" />
+
+                  {/* Block 1: Genesis Ledger Entry */}
+                  <g transform="translate(25, 36)">
+                    <rect x="-7" y="-7" width="14" height="14" rx="3.5" fill="#0E1222" stroke="#06B6D4" strokeWidth="1.5" />
+                    <circle cx="0" cy="0" r="2" fill="#06B6D4" />
+                  </g>
+
+                  {/* Block 2: Evidence Ingestion Hash */}
+                  <g transform="translate(75, 31)">
+                    <rect x="-7" y="-7" width="14" height="14" rx="3.5" fill="#0E1222" stroke="#8B5CF6" strokeWidth="1.5" />
+                    <circle cx="0" cy="0" r="2" fill="#8B5CF6" />
+                  </g>
+
+                  {/* Block 3: Custody Co-Sign */}
+                  <g transform="translate(130, 26)">
+                    <rect x="-7" y="-7" width="14" height="14" rx="3.5" fill="#0E1222" stroke="#8B5CF6" strokeWidth="1.5" />
+                    <circle cx="0" cy="0" r="2" fill="#8B5CF6" />
+                  </g>
+
+                  {/* Block 4: Section 65B Seal (Head Block) */}
+                  <g transform="translate(185, 16)">
+                    <rect x="-8.5" y="-8.5" width="17" height="17" rx="4.5" fill="#8B5CF6" stroke="#C084FC" strokeWidth="1.5" className="animate-pulse" />
+                    <polyline points="-3.5,0 -1,2.5 3.5,-2.5" fill="none" stroke="#FFFFFF" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                  </g>
                 </svg>
-                <span className="absolute right-0 top-0 text-[9px] font-mono text-violet-300 bg-violet-950/80 px-1.5 py-0.5 rounded-full border border-violet-500/30">
-                  {badgeText}
+                
+                <span className="absolute right-0 top-0 text-[9px] font-mono text-cyan-300 bg-cyan-950/80 px-2 py-0.5 rounded-full border border-cyan-500/30 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping"></span>
+                  <span>{badgeText || 'SHA-256 Valid'}</span>
                 </span>
               </div>
             </div>
@@ -701,30 +737,59 @@ export const DashboardPage = () => {
                 </div>
               </div>
 
-              {/* Glowing SVG Wave Sparkline */}
+              {/* Statutory Investigation Lifecycle Progression Pipeline */}
               <div className="mt-4 relative h-16 w-full">
-                <svg className="w-full h-full overflow-visible" viewBox="0 0 200 60" preserveAspectRatio="none">
+                <svg className="w-full h-full overflow-visible" viewBox="0 0 220 60" preserveAspectRatio="none">
                   <defs>
-                    <linearGradient id="wave2" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#38BDF8" stopOpacity="0.4" />
+                    <linearGradient id="pipelineGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#38BDF8" stopOpacity="0.35" />
                       <stop offset="100%" stopColor="#38BDF8" stopOpacity="0.0" />
                     </linearGradient>
+                    <linearGradient id="pipelineStroke" x1="0" y1="0" x2="1" y2="0">
+                      <stop offset="0%" stopColor="#38BDF8" />
+                      <stop offset="60%" stopColor="#60A5FA" />
+                      <stop offset="100%" stopColor="#818CF8" />
+                    </linearGradient>
                   </defs>
+                  
+                  {/* Stage baseline */}
+                  <line x1="10" y1="46" x2="210" y2="46" stroke="rgba(255,255,255,0.06)" strokeDasharray="2 2" strokeWidth="1" />
+
+                  {/* Stepped progress curve through 4 legal investigation milestones */}
                   <path
-                    d="M 0 50 Q 50 30, 100 45 T 160 25 T 200 35"
+                    d="M 15 44 C 35 44, 45 34, 70 34 C 95 34, 105 24, 135 24 C 165 24, 175 14, 205 14"
                     fill="none"
-                    stroke="#38BDF8"
+                    stroke="url(#pipelineStroke)"
                     strokeWidth="2.5"
-                    className="wave-glow"
+                    strokeLinecap="round"
                   />
                   <path
-                    d="M 0 50 Q 50 30, 100 45 T 160 25 T 200 35 L 200 60 L 0 60 Z"
-                    fill="url(#wave2)"
+                    d="M 15 44 C 35 44, 45 34, 70 34 C 95 34, 105 24, 135 24 C 165 24, 175 14, 205 14 L 205 52 L 15 52 Z"
+                    fill="url(#pipelineGrad)"
                   />
-                  <circle cx="160" cy="25" r="3.5" fill="#38BDF8" />
+
+                  {/* Stage 1 Node: FIR */}
+                  <circle cx="20" cy="44" r="3" fill="#38BDF8" />
+                  <text x="20" y="55" fontSize="6.5" fill="#94A3B8" textAnchor="middle" fontFamily="monospace">FIR</text>
+
+                  {/* Stage 2 Node: INVESTIGATION */}
+                  <circle cx="72" cy="34" r="3.5" fill="#38BDF8" stroke="#0F172A" strokeWidth="1.5" />
+                  <text x="72" y="55" fontSize="6.5" fill="#94A3B8" textAnchor="middle" fontFamily="monospace">INVST</text>
+
+                  {/* Stage 3 Node: CHARGE SHEET */}
+                  <circle cx="132" cy="24" r="3.5" fill="#60A5FA" stroke="#0F172A" strokeWidth="1.5" />
+                  <text x="132" y="55" fontSize="6.5" fill="#94A3B8" textAnchor="middle" fontFamily="monospace">CRPC</text>
+
+                  {/* Stage 4 Node: TRIAL (Current Active Milestone) */}
+                  <g transform="translate(195, 14)">
+                    <circle cx="0" cy="0" r="4.5" fill="#818CF8" className="animate-pulse" />
+                    <circle cx="0" cy="0" r="1.8" fill="#FFFFFF" />
+                    <text x="0" y="41" fontSize="6.5" fill="#818CF8" textAnchor="middle" fontFamily="monospace" fontWeight="bold">TRIAL</text>
+                  </g>
                 </svg>
-                <span className="absolute right-0 top-0 text-[9px] font-mono text-cyan-300 bg-cyan-950/80 px-1.5 py-0.5 rounded-full border border-cyan-500/30">
-                  +2,009 Blocks
+
+                <span className="absolute right-0 top-0 text-[9px] font-mono text-sky-300 bg-sky-950/80 px-2 py-0.5 rounded-full border border-sky-500/30">
+                  {filteredCases.length} Dossiers Active
                 </span>
               </div>
             </div>
@@ -824,31 +889,66 @@ export const DashboardPage = () => {
                 </div>
               </div>
 
-              {/* Glowing SVG Wave Sparkline with Alert Indicator */}
+              {/* Real-time Cyber Sentinel & Threat Telemetry Monitor */}
               <div className="mt-4 relative h-16 w-full">
-                <svg className="w-full h-full overflow-visible" viewBox="0 0 200 60" preserveAspectRatio="none">
-                  <defs>
-                    <linearGradient id="wave3" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#F43F5E" stopOpacity="0.4" />
-                      <stop offset="100%" stopColor="#F43F5E" stopOpacity="0.0" />
-                    </linearGradient>
-                  </defs>
-                  <path
-                    d="M 0 35 Q 60 50, 120 30 T 170 50 T 200 45"
-                    fill="none"
-                    stroke="#F43F5E"
-                    strokeWidth="2.5"
-                    className="wave-glow-red"
-                  />
-                  <path
-                    d="M 0 35 Q 60 50, 120 30 T 170 50 T 200 45 L 200 60 L 0 60 Z"
-                    fill="url(#wave3)"
-                  />
-                  <circle cx="170" cy="50" r="3.5" fill="#F43F5E" />
-                </svg>
-                <span className="absolute right-0 top-0 text-[9px] font-mono text-rose-300 bg-rose-950/80 px-1.5 py-0.5 rounded-full border border-rose-500/30">
-                  {badgeText}
-                </span>
+                {(() => {
+                  const alertCount = securityAlerts?.length || 0;
+                  const isSecure = alertCount === 0;
+                  const strokeColor = isSecure ? '#10B981' : '#F43F5E';
+                  const gradColor = isSecure ? '#10B981' : '#F43F5E';
+                  const tagText = isSecure ? (badgeText || 'Sentinel: 0 Threats') : `${alertCount} Threats Detected`;
+                  const tagBg = isSecure 
+                    ? 'text-emerald-300 bg-emerald-950/80 border-emerald-500/30' 
+                    : 'text-rose-300 bg-rose-950/80 border-rose-500/30';
+
+                  return (
+                    <>
+                      <svg className="w-full h-full overflow-visible" viewBox="0 0 220 60" preserveAspectRatio="none">
+                        <defs>
+                          <linearGradient id="sentinelGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor={gradColor} stopOpacity="0.25" />
+                            <stop offset="100%" stopColor={gradColor} stopOpacity="0.0" />
+                          </linearGradient>
+                        </defs>
+
+                        {/* Radar Scan Grid Lines */}
+                        <line x1="0" y1="20" x2="220" y2="20" stroke="rgba(255,255,255,0.04)" strokeDasharray="4 4" strokeWidth="1" />
+                        <line x1="0" y1="36" x2="220" y2="36" stroke="rgba(255,255,255,0.06)" strokeWidth="1" />
+
+                        {/* Sentinel Heartbeat Wave: Steady safe baseline with crisp telemetry monitoring pulses */}
+                        <path
+                          d={isSecure
+                            ? "M 0 36 L 38 36 L 44 28 L 50 44 L 56 20 L 64 48 L 70 36 L 120 36 L 126 28 L 132 44 L 138 20 L 146 48 L 152 36 L 220 36"
+                            : "M 0 36 L 50 36 L 65 18 L 75 50 L 90 10 L 105 52 L 120 36 L 220 36"
+                          }
+                          fill="none"
+                          stroke={strokeColor}
+                          strokeWidth="2.2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+
+                        {/* Area glow */}
+                        <path
+                          d={isSecure
+                            ? "M 0 36 L 38 36 L 44 28 L 50 44 L 56 20 L 64 48 L 70 36 L 120 36 L 126 28 L 132 44 L 138 20 L 146 48 L 152 36 L 220 36 L 220 60 L 0 60 Z"
+                            : "M 0 36 L 50 36 L 65 18 L 75 50 L 90 10 L 105 52 L 120 36 L 220 36 L 220 60 L 0 60 Z"
+                          }
+                          fill="url(#sentinelGrad)"
+                        />
+
+                        {/* Telemetry Pulse Beacon */}
+                        <circle cx={isSecure ? "138" : "90"} cy={isSecure ? "20" : "10"} r="3" fill={strokeColor} className="animate-ping" />
+                        <circle cx={isSecure ? "138" : "90"} cy={isSecure ? "20" : "10"} r="3.5" fill={strokeColor} />
+                      </svg>
+
+                      <span className={`absolute right-0 top-0 text-[9px] font-mono px-2 py-0.5 rounded-full border flex items-center gap-1 ${tagBg}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${isSecure ? 'bg-emerald-400' : 'bg-rose-400'}`}></span>
+                        <span>{tagText}</span>
+                      </span>
+                    </>
+                  );
+                })()}
               </div>
             </div>
           );
