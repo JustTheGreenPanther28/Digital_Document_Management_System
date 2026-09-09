@@ -178,25 +178,40 @@ export const CasesListPage = () => {
     } catch (_) {}
   };
 
+  const getCaseOverrides = () => {
+    try {
+      const raw = localStorage.getItem('sih_case_overrides');
+      return raw ? JSON.parse(raw) : {};
+    } catch {
+      return {};
+    }
+  };
+
   const loadCases = async () => {
     setLoading(true);
     setError('');
     const custom = getStoredCustomCases();
+    const overrides = getCaseOverrides();
+    const applyOverrides = (item) => {
+      const ov = overrides[String(item.id)] || (item.caseNumber ? overrides[String(item.caseNumber)] : null) || {};
+      return { ...item, ...ov };
+    };
+
     try {
       const data = await api.getCases();
       if (Array.isArray(data) && data.length > 0) {
         const map = new Map();
-        [...custom, ...data].forEach(item => map.set(String(item.id), item));
+        [...custom, ...data].forEach(item => map.set(String(item.id), applyOverrides(item)));
         setCases(Array.from(map.values()));
       } else {
         const map = new Map();
-        [...custom, ...FALLBACK_CASES].forEach(item => map.set(String(item.id), item));
+        [...custom, ...FALLBACK_CASES].forEach(item => map.set(String(item.id), applyOverrides(item)));
         setCases(Array.from(map.values()));
       }
     } catch (err) {
       console.warn('Backend cases fetch note:', err.message);
       const map = new Map();
-      [...custom, ...FALLBACK_CASES].forEach(item => map.set(String(item.id), item));
+      [...custom, ...FALLBACK_CASES].forEach(item => map.set(String(item.id), applyOverrides(item)));
       setCases(Array.from(map.values()));
     } finally {
       setLoading(false);

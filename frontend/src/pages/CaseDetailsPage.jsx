@@ -324,6 +324,34 @@ export const CaseDetailsPage = () => {
     } catch (_) {}
   };
 
+  const getCaseOverrides = (cId, cNum) => {
+    try {
+      const raw = localStorage.getItem('sih_case_overrides');
+      const map = raw ? JSON.parse(raw) : {};
+      const idKey = String(cId || '');
+      const numKey = String(cNum || '');
+      return (idKey && map[idKey]) || (numKey && map[numKey]) || {};
+    } catch {
+      return {};
+    }
+  };
+
+  const saveCaseOverride = (cId, cNum, updates) => {
+    try {
+      const raw = localStorage.getItem('sih_case_overrides');
+      const map = raw ? JSON.parse(raw) : {};
+      const idKey = String(cId || '');
+      const numKey = String(cNum || '');
+      if (idKey) {
+        map[idKey] = { ...(map[idKey] || {}), ...updates };
+      }
+      if (numKey) {
+        map[numKey] = { ...(map[numKey] || {}), ...updates };
+      }
+      localStorage.setItem('sih_case_overrides', JSON.stringify(map));
+    } catch (_) {}
+  };
+
   const loadChargeSheetForCase = async (targetCaseId, targetCase) => {
     try {
       const res = await api.getChargeSheet(targetCaseId).catch(() => null);
@@ -911,10 +939,17 @@ END OF OFFICIAL SECTION 173 CrPC / BNSS JUDICIAL CHARGE SHEET DOSSIER
       try {
         const details = await api.getCaseDetails(caseId);
         if (details && (details.caseNumber || details.title)) {
-          setCaseData(details);
+          const overrides = getCaseOverrides(caseId, details.caseNumber);
+          setCaseData({ ...details, ...overrides });
           const asgns = details.assignments || details.teamAssignments || [];
           setTeamList(asgns);
-          setHistoryList(details.statusHistory || []);
+          const storedHistory = getStoredStatusHistory().filter(
+            h => String(h.caseId) === String(caseId) || (details.caseNumber && h.caseNumber === details.caseNumber)
+          );
+          const combinedHistory = [...storedHistory, ...(details.statusHistory || [])];
+          const histMap = new Map();
+          combinedHistory.forEach(h => histMap.set(String(h.id), h));
+          setHistoryList(Array.from(histMap.values()));
           const [docs, ev] = await Promise.all([
             api.getCaseDocuments(caseId).catch(() => []),
             api.getCaseEvidence(caseId).catch(() => []),
@@ -940,6 +975,7 @@ END OF OFFICIAL SECTION 173 CrPC / BNSS JUDICIAL CHARGE SHEET DOSSIER
 
       // 3. If matched in custom cases, render it
       if (matchedCustom) {
+        const overrides = getCaseOverrides(matchedCustom.id, matchedCustom.caseNumber);
         const storedAsgns = getStoredAbacAssignments().filter(
           a => String(a.caseId) === String(matchedCustom.id) || 
                String(a.caseId) === String(matchedCustom.caseNumber) ||
@@ -962,21 +998,27 @@ END OF OFFICIAL SECTION 173 CrPC / BNSS JUDICIAL CHARGE SHEET DOSSIER
 
         setCaseData({
           ...matchedCustom,
+          ...overrides,
           incidentDate: matchedCustom.incidentDate || new Date().toISOString(),
           registrationDate: matchedCustom.registrationDate || new Date().toISOString(),
           createdByUsername: creatorUsername
         });
         setTeamList(resolvedTeam);
-        setHistoryList([
-          {
-            id: `sh-init`,
-            fromStatus: 'NONE',
-            toStatus: matchedCustom.status || 'REGISTERED',
-            reason: 'Initial case dossier registered in cryptographic vault',
-            changedByUsername: creatorUsername,
-            changedAt: matchedCustom.registrationDate || new Date().toISOString()
-          }
-        ]);
+        const storedHistory = getStoredStatusHistory().filter(
+          h => String(h.caseId) === String(matchedCustom.id) || (matchedCustom.caseNumber && h.caseNumber === matchedCustom.caseNumber)
+        );
+        const initialHist = {
+          id: `sh-init`,
+          fromStatus: 'NONE',
+          toStatus: matchedCustom.status || 'REGISTERED',
+          reason: 'Initial case dossier registered in cryptographic vault',
+          changedByUsername: creatorUsername,
+          changedAt: matchedCustom.registrationDate || new Date().toISOString()
+        };
+        const combinedHist = [...storedHistory, initialHist];
+        const histMap = new Map();
+        combinedHist.forEach(h => histMap.set(String(h.id), h));
+        setHistoryList(Array.from(histMap.values()));
 
         // Load any stored vault documents and evidence for this case
         const vaultDocs = getVaultDocumentsSafe(matchedCustom.id, matchedCustom.caseNumber);
@@ -1006,9 +1048,11 @@ END OF OFFICIAL SECTION 173 CrPC / BNSS JUDICIAL CHARGE SHEET DOSSIER
       const teamMap = new Map();
       resolvedTeam.forEach(m => teamMap.set(m.username || m.userId, m));
 
+      const overrides = getCaseOverrides(fallbackCase.id || caseId, fallbackCase.caseNumber);
       setCaseData({
         ...FALLBACK_CASE_DETAILS,
         ...fallbackCase,
+        ...overrides,
         id: fallbackCase.id || caseId,
         caseNumber: fallbackCase.caseNumber || 'CASE-2026-001',
         title: fallbackCase.title || 'State vs Cyber Syndicate Alpha',
@@ -1030,7 +1074,16 @@ END OF OFFICIAL SECTION 173 CrPC / BNSS JUDICIAL CHARGE SHEET DOSSIER
       combinedEv.forEach(e => evMap.set(String(e.id), e));
       setEvidenceList(Array.from(evMap.values()));
       setTeamList(Array.from(teamMap.values()));
-      setHistoryList(FALLBACK_CASE_DETAILS.statusHistory);
+
+      const storedHistory = getStoredStatusHistory().filter(
+        h => String(h.caseId) === String(fallbackCase.id) || 
+             String(h.caseId) === String(caseId) ||
+             (fallbackCase.caseNumber && h.caseNumber === fallbackCase.caseNumber)
+      );
+      const combinedHistory = [...storedHistory, ...(FALLBACK_CASE_DETAILS.statusHistory || [])];
+      const histMap = new Map();
+      combinedHistory.forEach(h => histMap.set(String(h.id), h));
+      setHistoryList(Array.from(histMap.values()));
       loadChargeSheetForCase(fallbackCase.id || caseId, fallbackCase);
       loadCourtFilingsForCase(fallbackCase.id || caseId);
     } catch (err) {
@@ -1099,44 +1152,58 @@ END OF OFFICIAL SECTION 173 CrPC / BNSS JUDICIAL CHARGE SHEET DOSSIER
 
   const handleStatusChange = async (e) => {
     e.preventDefault();
+    if (!targetStatus) {
+      alert('Please select a target status.');
+      return;
+    }
     setTransitioning(true);
     const newHistory = {
       id: `sh-${Date.now()}`,
       caseId: caseId,
-      fromStatus: caseData?.status,
+      caseNumber: caseData?.caseNumber,
+      fromStatus: caseData?.status || 'UNDER_INVESTIGATION',
       toStatus: targetStatus,
       reason: statusReason,
       changedByUsername: user?.username || 'senior_officer',
       changedAt: new Date().toISOString()
     };
+
+    const statusUpdates = {
+      status: targetStatus,
+      ...(targetStatus === 'ARCHIVED' ? {
+        wormPreserved: true,
+        wormPreservedUntil: new Date(Date.now() + 10 * 365 * 86400000).toISOString()
+      } : {})
+    };
+
+    // Save override to persistent storage immediately
+    saveCaseOverride(caseId, caseData?.caseNumber, statusUpdates);
+    saveCustomCaseUpdate({
+      id: caseId,
+      caseNumber: caseData?.caseNumber,
+      ...statusUpdates
+    });
+    saveStatusHistory(newHistory);
+    logCaseStatusChange({
+      caseNumber: caseData?.caseNumber || 'CASE-2026-001',
+      fromStatus: caseData?.status || 'REGISTERED',
+      toStatus: targetStatus,
+      reason: statusReason
+    });
+
+    setCaseData(prev => ({ ...prev, ...statusUpdates }));
+    setHistoryList(prev => [newHistory, ...prev]);
+
     try {
       await api.updateCaseStatus(caseId, {
         status: targetStatus,
         reason: statusReason,
       });
-      saveStatusHistory(newHistory);
-      logCaseStatusChange({
-        caseNumber: caseData?.caseNumber || 'CASE-2026-001',
-        fromStatus: caseData?.status || 'REGISTERED',
-        toStatus: targetStatus,
-        reason: statusReason
-      });
-      setShowStatusModal(false);
-      setStatusReason('');
-      loadAllCaseData();
     } catch (err) {
-      setCaseData(prev => ({ ...prev, status: targetStatus }));
-      setHistoryList(prev => [newHistory, ...prev]);
-      saveStatusHistory(newHistory);
-      logCaseStatusChange({
-        caseNumber: caseData?.caseNumber || 'CASE-2026-001',
-        fromStatus: caseData?.status || 'REGISTERED',
-        toStatus: targetStatus,
-        reason: statusReason
-      });
+      console.warn('Backend updateCaseStatus note:', err.message);
+    } finally {
       setShowStatusModal(false);
       setStatusReason('');
-    } finally {
       setTransitioning(false);
     }
   };
@@ -1149,39 +1216,46 @@ END OF OFFICIAL SECTION 173 CrPC / BNSS JUDICIAL CHARGE SHEET DOSSIER
     }
     setArchiving(true);
     const targetCaseId = caseData?.id || caseId;
+    const now = new Date();
+    const expDate = new Date(now.setFullYear(now.getFullYear() + Number(archiveForm.retentionYears))).toISOString();
+    const pseudoToken = `WORM-COMPLIANCE-SEAL-${Date.now().toString(16).toUpperCase()}`;
+
+    const archiveUpdates = {
+      status: 'ARCHIVED',
+      wormPreserved: true,
+      wormPreservedUntil: expDate,
+      wormComplianceToken: pseudoToken,
+      archiveReason: archiveForm.archiveReason,
+      archivedAt: new Date().toISOString(),
+      archivedBy: user?.username || 'senior_officer'
+    };
+
+    saveCaseOverride(targetCaseId, caseData?.caseNumber, archiveUpdates);
+    saveCustomCaseUpdate({ id: targetCaseId, caseNumber: caseData?.caseNumber, ...archiveUpdates });
+
+    setCaseData(prev => ({
+      ...prev,
+      ...archiveUpdates
+    }));
+    setDocuments(prev => prev.map(d => ({
+      ...d,
+      wormLocked: true,
+      wormLockUntil: expDate,
+      wormRetentionMode: archiveForm.wormMode,
+      wormComplianceHash: `WORM-SHA256-${Date.now().toString(16)}`
+    })));
+
     try {
       const res = await api.archiveCase(targetCaseId, archiveForm);
       logCaseArchived({
         caseNumber: caseData?.caseNumber || 'CASE-2026-001',
         reason: archiveForm.archiveReason,
         retentionYears: archiveForm.retentionYears,
-        wormToken: res?.wormComplianceToken,
-        wormLockUntil: res?.wormPreservedUntil
+        wormToken: res?.wormComplianceToken || pseudoToken,
+        wormLockUntil: res?.wormPreservedUntil || expDate
       });
-      setShowArchiveModal(false);
-      loadAllCaseData();
     } catch (err) {
-      // Optimistic local update for mock/demo
-      const now = new Date();
-      const expDate = new Date(now.setFullYear(now.getFullYear() + Number(archiveForm.retentionYears))).toISOString();
-      const pseudoToken = `WORM-COMPLIANCE-SEAL-${Date.now().toString(16).toUpperCase()}`;
-      setCaseData(prev => ({
-        ...prev,
-        status: 'ARCHIVED',
-        wormPreserved: true,
-        wormPreservedUntil: expDate,
-        wormComplianceToken: pseudoToken,
-        archiveReason: archiveForm.archiveReason,
-        archivedAt: new Date().toISOString(),
-        archivedBy: user?.username || 'senior_officer'
-      }));
-      setDocuments(prev => prev.map(d => ({
-        ...d,
-        wormLocked: true,
-        wormLockUntil: expDate,
-        wormRetentionMode: archiveForm.wormMode,
-        wormComplianceHash: `WORM-SHA256-${Date.now().toString(16)}`
-      })));
+      console.warn('Backend archiveCase note:', err.message);
       logCaseArchived({
         caseNumber: caseData?.caseNumber || 'CASE-2026-001',
         reason: archiveForm.archiveReason,
@@ -1189,35 +1263,43 @@ END OF OFFICIAL SECTION 173 CrPC / BNSS JUDICIAL CHARGE SHEET DOSSIER
         wormToken: pseudoToken,
         wormLockUntil: expDate
       });
-      setShowArchiveModal(false);
     } finally {
+      setShowArchiveModal(false);
       setArchiving(false);
     }
   };
 
   const toggleLegalHold = async () => {
     setLegalHoldLoading(true);
-    const action = caseData?.legalHold ? 'LIFTED' : 'PLACED';
-    const reason = caseData?.legalHold ? 'Preservation order lifted by authorized supervisor' : 'Litigation preservation order issued by Senior Officer';
+    const newHoldState = !caseData?.legalHold;
+    const action = newHoldState ? 'PLACED' : 'LIFTED';
+    const reason = newHoldState 
+      ? 'Litigation preservation order issued by Senior Officer' 
+      : 'Preservation order lifted by authorized supervisor';
+
+    // Persist immediately
+    saveCaseOverride(caseId, caseData?.caseNumber, { legalHold: newHoldState });
+    saveCustomCaseUpdate({
+      id: caseId,
+      caseNumber: caseData?.caseNumber,
+      legalHold: newHoldState
+    });
+
+    setCaseData(prev => ({ ...prev, legalHold: newHoldState }));
+    logLegalHold({
+      caseNumber: caseData?.caseNumber || 'CASE-2026-001',
+      action,
+      reason
+    });
+
     try {
-      if (caseData?.legalHold) {
+      if (!newHoldState) {
         await api.liftLegalHold(caseId);
       } else {
         await api.placeLegalHold(caseId, reason);
       }
-      logLegalHold({
-        caseNumber: caseData?.caseNumber || 'CASE-2026-001',
-        action,
-        reason
-      });
-      loadAllCaseData();
     } catch (err) {
-      setCaseData(prev => ({ ...prev, legalHold: !prev?.legalHold }));
-      logLegalHold({
-        caseNumber: caseData?.caseNumber || 'CASE-2026-001',
-        action,
-        reason
-      });
+      console.warn('Backend legal hold toggle note:', err.message);
     } finally {
       setLegalHoldLoading(false);
     }
@@ -2067,12 +2149,12 @@ modification, tamper event, or parity mismatch was detected during verification.
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex flex-row items-center gap-2.5 flex-nowrap shrink-0">
             {/* Archive to WORM Vault Action - Available on CLOSED cases for Senior Officer & Admin */}
             {caseData.status === 'CLOSED' && (hasRole('SENIOR_OFFICER') || hasRole('ADMIN')) && (
               <button
                 onClick={() => setShowArchiveModal(true)}
-                className="px-4 py-2 rounded-full bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white text-xs font-semibold transition shadow-lg shadow-amber-600/30 border border-amber-400/40 flex items-center gap-1.5"
+                className="px-4 py-2 rounded-full bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white text-xs font-semibold transition shadow-lg shadow-amber-600/30 border border-amber-400/40 flex items-center gap-1.5 whitespace-nowrap cursor-pointer"
               >
                 <Archive className="w-3.5 h-3.5" />
                 <span>Archive to WORM Vault</span>
@@ -2083,18 +2165,18 @@ modification, tamper event, or parity mismatch was detected during verification.
             {(hasRole('SENIOR_OFFICER') || hasRole('ADMIN')) && (
               <button
                 onClick={() => setShowStatusModal(true)}
-                className="px-4 py-2 rounded-full bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold transition shadow-lg shadow-violet-600/30 border border-violet-400/30"
+                className="px-4 py-2 rounded-full bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold transition shadow-lg shadow-violet-600/30 border border-violet-400/30 whitespace-nowrap cursor-pointer"
               >
                 Update Status
               </button>
             )}
 
-            {/* Legal Hold Button */}
+            {/* Legal Hold Button - Strictly adjacent to Update Status */}
             {(hasRole('SENIOR_OFFICER') || hasRole('ADMIN') || hasRole('PROSECUTOR')) && (
               <button
                 onClick={toggleLegalHold}
                 disabled={legalHoldLoading}
-                className={`px-4 py-2 rounded-full text-xs font-semibold transition border ${
+                className={`px-4 py-2 rounded-full text-xs font-semibold transition border whitespace-nowrap cursor-pointer ${
                   caseData.legalHold
                     ? 'bg-rose-950/60 border-rose-500/40 text-rose-300 hover:bg-rose-900/60'
                     : 'bg-[#181D33] border-white/[0.08] text-slate-300 hover:text-white'
