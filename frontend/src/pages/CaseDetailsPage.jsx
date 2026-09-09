@@ -49,6 +49,7 @@ import {
   CheckCircle
 } from 'lucide-react';
 import { checkCaseAccess, canClearanceAccess, getStoredTeamAssignments as getStoredAbacAssignments } from '../services/abac';
+import { saveVaultDocumentSafe, getVaultDocumentsSafe, getVaultFile } from '../services/vaultFileStorage';
 import { 
   logDocumentDownload, 
   logDocumentUpload, 
@@ -918,8 +919,17 @@ END OF OFFICIAL SECTION 173 CrPC / BNSS JUDICIAL CHARGE SHEET DOSSIER
             api.getCaseDocuments(caseId).catch(() => []),
             api.getCaseEvidence(caseId).catch(() => []),
           ]);
-          setDocuments(docs || []);
-          setEvidenceList(ev || []);
+          const storedDocs = getVaultDocumentsSafe(caseId, details.caseNumber);
+          const docMap = new Map();
+          [...storedDocs, ...(docs || [])].forEach(d => docMap.set(String(d.id), d));
+          setDocuments(Array.from(docMap.values()));
+
+          const storedEv = getStoredEvidence().filter(
+            e => String(e.caseId) === String(caseId) || e.caseNumber === details.caseNumber
+          );
+          const evMap = new Map();
+          [...storedEv, ...(ev || [])].forEach(e => evMap.set(String(e.id), e));
+          setEvidenceList(Array.from(evMap.values()));
           loadChargeSheetForCase(caseId, details);
           loadCourtFilingsForCase(caseId);
           return;
@@ -969,7 +979,7 @@ END OF OFFICIAL SECTION 173 CrPC / BNSS JUDICIAL CHARGE SHEET DOSSIER
         ]);
 
         // Load any stored vault documents and evidence for this case
-        const vaultDocs = getStoredVaultDocs().filter(d => d.caseId === matchedCustom.id || d.caseNumber === matchedCustom.caseNumber);
+        const vaultDocs = getVaultDocumentsSafe(matchedCustom.id, matchedCustom.caseNumber);
         const storedEv = getStoredEvidence().filter(e => e.caseId === matchedCustom.id || e.caseNumber === matchedCustom.caseNumber);
         setDocuments(vaultDocs);
         setEvidenceList(storedEv);
@@ -1003,8 +1013,22 @@ END OF OFFICIAL SECTION 173 CrPC / BNSS JUDICIAL CHARGE SHEET DOSSIER
         caseNumber: fallbackCase.caseNumber || 'CASE-2026-001',
         title: fallbackCase.title || 'State vs Cyber Syndicate Alpha',
       });
-      setDocuments(FALLBACK_DOCS);
-      setEvidenceList(FALLBACK_EVIDENCE);
+      const storedDocs = getVaultDocumentsSafe(fallbackCase.id, fallbackCase.caseNumber);
+      const combinedDocs = [...storedDocs, ...FALLBACK_DOCS];
+      const docMap = new Map();
+      combinedDocs.forEach(d => docMap.set(String(d.id), d));
+      setDocuments(Array.from(docMap.values()));
+
+      const storedEv = getStoredEvidence().filter(
+        e => String(e.caseId) === String(fallbackCase.id) || 
+             String(e.caseId) === String(caseId) ||
+             e.caseNumber === fallbackCase.caseNumber ||
+             e.caseNumber === caseId
+      );
+      const combinedEv = [...storedEv, ...FALLBACK_EVIDENCE];
+      const evMap = new Map();
+      combinedEv.forEach(e => evMap.set(String(e.id), e));
+      setEvidenceList(Array.from(evMap.values()));
       setTeamList(Array.from(teamMap.values()));
       setHistoryList(FALLBACK_CASE_DETAILS.statusHistory);
       loadChargeSheetForCase(fallbackCase.id || caseId, fallbackCase);
@@ -1021,18 +1045,11 @@ END OF OFFICIAL SECTION 173 CrPC / BNSS JUDICIAL CHARGE SHEET DOSSIER
   };
 
   const getStoredVaultDocs = () => {
-    try {
-      const stored = localStorage.getItem('sih_vault_documents');
-      return stored ? JSON.parse(stored) : [];
-    } catch { return []; }
+    return getVaultDocumentsSafe();
   };
 
   const saveVaultDoc = (doc) => {
-    try {
-      const current = getStoredVaultDocs();
-      const updated = [doc, ...current.filter(d => d.id !== doc.id)];
-      localStorage.setItem('sih_vault_documents', JSON.stringify(updated));
-    } catch (_) {}
+    saveVaultDocumentSafe(doc);
   };
 
   const getStoredEvidence = () => {
@@ -1497,10 +1514,16 @@ END OF OFFICIAL SECTION 173 CrPC / BNSS JUDICIAL CHARGE SHEET DOSSIER
         fileSize: doc.fileSize
       });
 
-      // 1. If stored data URL/blob exists in client storage for uploaded file (images, PDFs, binary, etc.)
-      if (doc.fileDataUrl) {
+      // 1. If stored data URL/blob exists in client storage or IndexedDB for uploaded file (images, PDFs, binary, etc.)
+      let filePayload = doc.fileDataUrl;
+      if (!filePayload) {
+        try {
+          filePayload = await getVaultFile(doc.id);
+        } catch (_) {}
+      }
+      if (filePayload) {
         const a = document.createElement('a');
-        a.href = doc.fileDataUrl;
+        a.href = filePayload;
         a.download = doc.originalFilename || `${doc.title || 'document'}`;
         document.body.appendChild(a);
         a.click();

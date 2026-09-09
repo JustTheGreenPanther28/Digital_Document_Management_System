@@ -76,6 +76,7 @@ const FALLBACK_VAULT_DOCS = [
 import { useAuth } from '../context/AuthContext';
 import { canClearanceAccess } from '../services/abac';
 import { logDocumentDownload, logDocumentUpload } from '../services/auditLogger';
+import { saveVaultDocumentSafe, getVaultDocumentsSafe, getVaultFile } from '../services/vaultFileStorage';
 
 export const DocumentVaultPage = () => {
   const { user, hasRole } = useAuth();
@@ -97,18 +98,11 @@ export const DocumentVaultPage = () => {
   }, []);
 
   const getStoredVaultDocs = () => {
-    try {
-      const stored = localStorage.getItem('sih_vault_documents');
-      return stored ? JSON.parse(stored) : [];
-    } catch { return []; }
+    return getVaultDocumentsSafe();
   };
 
   const saveVaultDoc = (doc) => {
-    try {
-      const current = getStoredVaultDocs();
-      const updated = [doc, ...current.filter(d => d.id !== doc.id)];
-      localStorage.setItem('sih_vault_documents', JSON.stringify(updated));
-    } catch (_) {}
+    saveVaultDocumentSafe(doc);
   };
 
   const loadAllDocuments = async () => {
@@ -165,10 +159,14 @@ export const DocumentVaultPage = () => {
         fileSize: doc.fileSize
       });
 
-      // 1. If stored data URL/blob exists in client storage for uploaded file
-      if (doc.fileDataUrl) {
+      // 1. If stored data URL/blob exists in client storage or IndexedDB for uploaded file
+      let dataUrl = doc.fileDataUrl;
+      if (!dataUrl && doc.id) {
+        dataUrl = await getVaultFile(doc.id);
+      }
+      if (dataUrl) {
         const a = document.createElement('a');
-        a.href = doc.fileDataUrl;
+        a.href = dataUrl;
         a.download = doc.originalFilename || `${doc.title || 'document'}.pdf`;
         document.body.appendChild(a);
         a.click();
