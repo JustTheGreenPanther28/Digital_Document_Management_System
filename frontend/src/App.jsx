@@ -67,7 +67,7 @@ import {
   Briefcase 
 } from 'lucide-react';
 
-const AccessDeniedView = ({ user, allowedRoles, pageTitle }) => {
+const AccessDeniedView = ({ user, allowedRoles, requiredPermission, pageTitle }) => {
   return (
     <div className="obsidian-card p-8 sm:p-10 rounded-3xl border border-rose-500/40 text-center space-y-6 max-w-xl mx-auto my-12 select-none shadow-[0_20px_50px_rgba(244,63,94,0.18)] bg-[#0B0D17]">
       <div className="w-16 h-16 rounded-3xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center mx-auto text-rose-400 shadow-lg shadow-rose-500/20">
@@ -77,13 +77,15 @@ const AccessDeniedView = ({ user, allowedRoles, pageTitle }) => {
       <div className="space-y-2">
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-500/10 border border-rose-500/30 text-rose-400 text-[10px] font-mono font-bold uppercase tracking-wider">
           <Lock className="w-3 h-3" />
-          <span>403 FORBIDDEN • PRIVILEGE RESTRICTION</span>
+          <span>403 FORBIDDEN • {requiredPermission ? 'ENTITLEMENT REVOKED' : 'PRIVILEGE RESTRICTION'}</span>
         </div>
         <h2 className="text-xl font-bold text-white tracking-tight">
-          Access Denied: High-Level Clearance Required
+          {requiredPermission ? `Access Denied: Missing ${requiredPermission} Entitlement` : 'Access Denied: High-Level Clearance Required'}
         </h2>
         <p className="text-xs text-slate-300 leading-relaxed max-w-md mx-auto">
-          Under Section 65B of the Indian Evidence Act and ISO/IEC 27037 RBAC compliance protocols, access to this restricted area {pageTitle ? `(${pageTitle})` : ''} is restricted. Your current persona lacks authorization.
+          {requiredPermission 
+            ? `Under Section 65B of the Indian Evidence Act and ISO/IEC 27037 RBAC compliance protocols, access to this area ${pageTitle ? `(${pageTitle})` : ''} is prohibited because the required entitlement (${requiredPermission}) has been revoked for your persona in the RBAC Security Matrix.`
+            : `Under Section 65B of the Indian Evidence Act and ISO/IEC 27037 RBAC compliance protocols, access to this restricted area ${pageTitle ? `(${pageTitle})` : ''} is restricted. Your current persona lacks authorization.`}
         </p>
       </div>
 
@@ -99,11 +101,11 @@ const AccessDeniedView = ({ user, allowedRoles, pageTitle }) => {
         </div>
         <div className="flex justify-between items-center text-slate-400">
           <span>Required Authority:</span>
-          <span className="text-cyan-400 font-bold">{allowedRoles?.join(' | ') || 'AUTHORIZED PERSONA ONLY'}</span>
+          <span className="text-cyan-400 font-bold">{requiredPermission ? `PERMISSION: ${requiredPermission}` : (allowedRoles?.join(' | ') || 'AUTHORIZED PERSONA ONLY')}</span>
         </div>
         <div className="flex justify-between items-center text-slate-400">
           <span>Security Policy Decision:</span>
-          <span className="text-rose-400 font-bold">ACCESS BLOCKED (UNAUTHORIZED PERSONA)</span>
+          <span className="text-rose-400 font-bold">ACCESS BLOCKED ({requiredPermission ? 'ENTITLEMENT REVOKED' : 'UNAUTHORIZED PERSONA'})</span>
         </div>
       </div>
 
@@ -120,8 +122,8 @@ const AccessDeniedView = ({ user, allowedRoles, pageTitle }) => {
   );
 };
 
-const ProtectedLayout = ({ children, allowedRoles, pageTitle }) => {
-  const { user, isAuthenticated, loading, hasRole } = useAuth();
+const ProtectedLayout = ({ children, allowedRoles, requiredPermission, pageTitle }) => {
+  const { user, isAuthenticated, loading, hasRole, hasPermission } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
 
   if (loading) {
@@ -136,7 +138,9 @@ const ProtectedLayout = ({ children, allowedRoles, pageTitle }) => {
     return <Navigate to="/login" replace />;
   }
 
-  const isAuthorized = !allowedRoles || allowedRoles.some(role => hasRole(role));
+  const roleAuthorized = !allowedRoles || allowedRoles.some(role => hasRole(role));
+  const permAuthorized = !requiredPermission || (hasPermission ? hasPermission(requiredPermission) : true);
+  const isAuthorized = roleAuthorized && permAuthorized;
 
   return (
     <div className="min-h-screen bg-[#08090E] flex flex-col text-slate-100 selection:bg-violet-600 selection:text-white overflow-x-hidden">
@@ -148,7 +152,7 @@ const ProtectedLayout = ({ children, allowedRoles, pageTitle }) => {
             {isAuthorized ? (
               children
             ) : (
-              <AccessDeniedView user={user} allowedRoles={allowedRoles} pageTitle={pageTitle} />
+              <AccessDeniedView user={user} allowedRoles={allowedRoles} requiredPermission={requiredPermission} pageTitle={pageTitle} />
             )}
           </ErrorBoundary>
         </main>
@@ -166,9 +170,11 @@ const RootRedirect = () => {
 };
 
 const PublicLoginRoute = () => {
-  const { isAuthenticated, loading } = useAuth();
-  if (loading) return null;
-  return isAuthenticated ? <Navigate to="/dashboard" replace /> : <LoginPage />;
+  const { isAuthenticated } = useAuth();
+  // Only redirect if user is actually authenticated — do NOT return null during
+  // login-in-progress loading state, as that unmounts LoginPage and wipes error state.
+  if (isAuthenticated) return <Navigate to="/dashboard" replace />;
+  return <LoginPage />;
 };
 
 export const App = () => {
@@ -189,7 +195,7 @@ export const App = () => {
           <Route
             path="/cases"
             element={
-              <ProtectedLayout>
+              <ProtectedLayout requiredPermission="CASE_READ" pageTitle="Case Dossiers">
                 <CasesListPage />
               </ProtectedLayout>
             }
@@ -197,7 +203,7 @@ export const App = () => {
           <Route
             path="/cases/:caseId"
             element={
-              <ProtectedLayout>
+              <ProtectedLayout requiredPermission="CASE_READ" pageTitle="Case Investigation Dossier">
                 <CaseDetailsPage />
               </ProtectedLayout>
             }

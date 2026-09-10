@@ -178,7 +178,7 @@ const FALLBACK_EVIDENCE = [
 export const CaseDetailsPage = () => {
   const { caseId } = useParams();
   const navigate = useNavigate();
-  const { user, hasRole } = useAuth();
+  const { user, hasRole, hasPermission } = useAuth();
 
   const [caseData, setCaseData] = useState(null);
   const [documents, setDocuments] = useState([]);
@@ -2045,7 +2045,9 @@ modification, tamper event, or parity mismatch was detected during verification.
           <h2 className="text-xl font-bold text-white tracking-tight">
             {accessDecision.reason === 'INSUFFICIENT_CLEARANCE' 
               ? 'Security Clearance Insufficient' 
-              : 'Unauthorized Officer — Not Assigned to Case'}
+              : accessDecision.reason === 'PERMISSION_REVOKED'
+                ? 'Access Denied: CASE_READ Revoked'
+                : 'Unauthorized Officer — Not Assigned to Case'}
           </h2>
           <p className="text-xs text-slate-300 leading-relaxed max-w-md mx-auto">
             {accessDecision.details}
@@ -2072,7 +2074,13 @@ modification, tamper event, or parity mismatch was detected during verification.
           </div>
           <div className="flex justify-between items-center text-slate-400">
             <span>ABAC Decision:</span>
-            <span className="text-rose-400 font-bold">DENIED (UNASSIGNED PERSONA)</span>
+            <span className="text-rose-400 font-bold">
+              {accessDecision.reason === 'PERMISSION_REVOKED' 
+                ? 'DENIED (ROLE PERMISSION REVOKED)' 
+                : accessDecision.reason === 'INSUFFICIENT_CLEARANCE' 
+                  ? 'DENIED (CLEARANCE LEVEL)' 
+                  : 'DENIED (UNASSIGNED PERSONA)'}
+            </span>
           </div>
         </div>
 
@@ -2089,13 +2097,16 @@ modification, tamper event, or parity mismatch was detected during verification.
     );
   }
 
-  const canAssignTeam = hasRole('SENIOR_OFFICER') || hasRole('ADMIN');
-  const isCustodyEligible = hasRole('INVESTIGATOR') || hasRole('EVIDENCE_CUSTODIAN') || hasRole('FORENSIC_OFFICER') || hasRole('SENIOR_OFFICER') || hasRole('ADMIN');
+  const canAssignTeam = hasPermission ? hasPermission('CASE_ASSIGN_TEAM') : (hasRole('SENIOR_OFFICER') || hasRole('ADMIN'));
+  const canUpdateStatus = hasPermission ? hasPermission('CASE_UPDATE_STATUS') : (hasRole('SENIOR_OFFICER') || hasRole('ADMIN'));
+  const canLegalHold = hasPermission ? hasPermission('CASE_LEGAL_HOLD') : (hasRole('SENIOR_OFFICER') || hasRole('ADMIN') || hasRole('PROSECUTOR'));
+  const canArchive = hasPermission ? hasPermission('RETENTION_MANAGE') : (hasRole('SENIOR_OFFICER') || hasRole('ADMIN'));
+  const isCustodyEligible = hasPermission ? (hasPermission('EVIDENCE_TRANSFER') || hasPermission('EVIDENCE_REGISTER')) : (hasRole('INVESTIGATOR') || hasRole('EVIDENCE_CUSTODIAN') || hasRole('FORENSIC_OFFICER') || hasRole('SENIOR_OFFICER') || hasRole('ADMIN'));
   const isAuditor = hasRole('AUDITOR');
   const isClosedOrArchived = caseData?.status === 'CLOSED' || caseData?.status === 'ARCHIVED';
-  const canRegisterEvidence = isCustodyEligible && !isClosedOrArchived;
-  const canUploadDocuments = !isAuditor && !isClosedOrArchived;
-  const canInitiateTransfer = isCustodyEligible && !isClosedOrArchived;
+  const canRegisterEvidence = (hasPermission ? hasPermission('EVIDENCE_REGISTER') : isCustodyEligible) && !isClosedOrArchived;
+  const canUploadDocuments = (hasPermission ? hasPermission('DOCUMENT_UPLOAD') : !isAuditor) && !isClosedOrArchived;
+  const canInitiateTransfer = (hasPermission ? hasPermission('EVIDENCE_TRANSFER') : isCustodyEligible) && !isClosedOrArchived;
 
   return (
     <div className="space-y-6 select-none max-w-7xl mx-auto">
@@ -2150,8 +2161,8 @@ modification, tamper event, or parity mismatch was detected during verification.
           </div>
 
           <div className="flex flex-row items-center gap-2.5 flex-nowrap shrink-0">
-            {/* Archive to WORM Vault Action - Available on CLOSED cases for Senior Officer & Admin */}
-            {caseData.status === 'CLOSED' && (hasRole('SENIOR_OFFICER') || hasRole('ADMIN')) && (
+            {/* Archive to WORM Vault Action - Available on CLOSED cases */}
+            {caseData.status === 'CLOSED' && canArchive && (
               <button
                 onClick={() => setShowArchiveModal(true)}
                 className="px-4 py-2 rounded-full bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white text-xs font-semibold transition shadow-lg shadow-amber-600/30 border border-amber-400/40 flex items-center gap-1.5 whitespace-nowrap cursor-pointer"
@@ -2161,8 +2172,8 @@ modification, tamper event, or parity mismatch was detected during verification.
               </button>
             )}
 
-            {/* Status Transition Action - Restricted to Senior Officer & Admin */}
-            {(hasRole('SENIOR_OFFICER') || hasRole('ADMIN')) && (
+            {/* Status Transition Action - Connected to CASE_UPDATE_STATUS */}
+            {canUpdateStatus && (
               <button
                 onClick={() => setShowStatusModal(true)}
                 className="px-4 py-2 rounded-full bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold transition shadow-lg shadow-violet-600/30 border border-violet-400/30 whitespace-nowrap cursor-pointer"
@@ -2171,8 +2182,8 @@ modification, tamper event, or parity mismatch was detected during verification.
               </button>
             )}
 
-            {/* Legal Hold Button - Strictly adjacent to Update Status */}
-            {(hasRole('SENIOR_OFFICER') || hasRole('ADMIN') || hasRole('PROSECUTOR')) && (
+            {/* Legal Hold Button - Connected to CASE_LEGAL_HOLD */}
+            {canLegalHold && (
               <button
                 onClick={toggleLegalHold}
                 disabled={legalHoldLoading}

@@ -30,11 +30,6 @@ import {
   Sparkles, 
   Link as LinkIcon, 
   ExternalLink, 
-  Sliders, 
-  Maximize2, 
-  Share2, 
-  Play, 
-  Pause, 
   Layers, 
   ArrowRight, 
   Send,
@@ -44,7 +39,7 @@ import {
   Filter,
   FileText
 } from 'lucide-react';
-import { canClearanceAccess } from '../services/abac';
+import { canClearanceAccess, checkCaseAccess } from '../services/abac';
 
 const FALLBACK_CASES = [
   {
@@ -110,7 +105,7 @@ const FALLBACK_CASES = [
 ];
 
 export const DashboardPage = () => {
-  const { user, hasRole } = useAuth();
+  const { user, hasRole, hasPermission, permVersion } = useAuth();
   const navigate = useNavigate();
   const [cases, setCases] = useState([]);
   const [pendingTransfers, setPendingTransfers] = useState([]);
@@ -119,11 +114,6 @@ export const DashboardPage = () => {
   const [verifyingLedger, setVerifyingLedger] = useState(false);
   const [ledgerStatus, setLedgerStatus] = useState(null);
   
-  // Interactive Timeline state
-  const [retentionPeriod, setRetentionPeriod] = useState(4);
-  const [isPlayingTimeline, setIsPlayingTimeline] = useState(false);
-  const [statutoryCeiling, setStatutoryCeiling] = useState('6 Month');
-  const [showTimelineDetails, setShowTimelineDetails] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
 
   // Inter-Agency Secure Dispatch State
@@ -142,17 +132,6 @@ export const DashboardPage = () => {
   const [sortOrder, setSortOrder] = useState('DESC');
   const [openDropdown, setOpenDropdown] = useState(null); // 'time', 'status', 'sort', or null
   const [selectedCaseId, setSelectedCaseId] = useState(null);
-
-  // Playback timer effect
-  useEffect(() => {
-    let timer;
-    if (isPlayingTimeline) {
-      timer = setInterval(() => {
-        setRetentionPeriod((prev) => (prev >= 12 ? 1 : prev + 1));
-      }, 700);
-    }
-    return () => clearInterval(timer);
-  }, [isPlayingTimeline]);
 
   // Click outside listener for dropdowns
   useEffect(() => {
@@ -211,10 +190,15 @@ export const DashboardPage = () => {
     }
   };
 
-  // 1. Mandatory Access Control (MAC) Cleared Cases
+  const canReadCases = hasPermission ? hasPermission('CASE_READ') : true;
+
+  // 1. Mandatory Access Control (MAC) & ABAC Cleared Cases
   const clearedCases = useMemo(() => {
-    return cases.filter(c => canClearanceAccess(user?.clearance, c.classification));
-  }, [cases, user?.clearance]);
+    if (!canReadCases) return [];
+    return cases
+      .filter(c => canClearanceAccess(user?.clearance, c.classification))
+      .filter(c => checkCaseAccess(user, c).allowed);
+  }, [cases, user, canReadCases, permVersion]);
 
   // 2. Multi-Dimensional Reactive Filters (Status, Time Window, Sort Order)
   const filteredCases = useMemo(() => {
@@ -290,14 +274,6 @@ export const DashboardPage = () => {
     setTimeout(() => setToastMessage(''), 3000);
   };
 
-  const cycleStatutoryCeiling = () => {
-    const ceilings = ['6 Month', '12 Month', '24 Month', '5 Year'];
-    const idx = ceilings.indexOf(statutoryCeiling);
-    const next = ceilings[(idx + 1) % ceilings.length];
-    setStatutoryCeiling(next);
-    showToast(`Statutory Ceiling updated to ${next}`);
-  };
-
   const handleVerifyLedger = async () => {
     setVerifyingLedger(true);
     try {
@@ -326,22 +302,6 @@ export const DashboardPage = () => {
       {/* 1. Top Filter & Section Header Row (matching reference top row) */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          {/* Recommended Pills Header */}
-          <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#141829] border border-white/[0.08] text-[11px] font-medium text-slate-300">
-              <span>{timeRange === 'ALL' ? 'All Time' : timeRange === '24H' ? 'Last 24 Hours' : timeRange === '7D' ? 'Last 7 Days' : 'Last 30 Days'}</span>
-              <Clock className="w-3 h-3 text-violet-400" />
-            </div>
-            <span className="px-2.5 py-1 rounded-full bg-violet-600/20 text-[11px] font-semibold text-violet-300 border border-violet-500/30">
-              {filteredCases.length} of {clearedCases.length} Dossiers
-            </span>
-            {custodyFilter !== 'ALL' && (
-              <span className="px-2.5 py-1 rounded-full bg-amber-500/20 text-[11px] font-semibold text-amber-300 border border-amber-500/30 flex items-center gap-1">
-                <Filter className="w-3 h-3" />
-                <span>{custodyFilter === 'IN_TRIAL' ? 'In Trial' : custodyFilter.replace(/_/g, ' ')}</span>
-              </span>
-            )}
-          </div>
           <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
             Top Priority Dossiers
           </h1>
@@ -1166,44 +1126,16 @@ export const DashboardPage = () => {
         </div>
       )}
 
-      {/* 3. Bottom Active Dossier & Custody Retention Timeline Section (matching reference bottom section) */}
+      {/* 3. Bottom Active Dossier Section */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-base font-bold text-slate-200">
             Your Active Dossiers
           </h2>
-          <div className="flex items-center gap-2 text-slate-400">
-            <button 
-              onClick={() => {
-                showToast(`Simulation Speed: ${isPlayingTimeline ? 'Auto-stepping every 0.7s' : 'Paused'}`);
-              }}
-              className="p-1.5 hover:text-white transition rounded-lg hover:bg-[#181D33]"
-              title="Configure Retention Scrubber Speed"
-            >
-              <Sliders className="w-3.5 h-3.5" />
-            </button>
-            <button 
-              onClick={() => setShowTimelineDetails(true)}
-              className="p-1.5 hover:text-white transition rounded-lg hover:bg-[#181D33]"
-              title="Expand Detailed Timeline Breakdown"
-            >
-              <Maximize2 className="w-3.5 h-3.5" />
-            </button>
-            <button 
-              onClick={() => {
-                navigator.clipboard?.writeText(window.location.href);
-                showToast('Dossier custody dashboard link copied to clipboard!');
-              }}
-              className="p-1.5 hover:text-white transition rounded-lg hover:bg-[#181D33]"
-              title="Share Custody Timeline Report"
-            >
-              <Share2 className="w-3.5 h-3.5" />
-            </button>
-          </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {/* Active Case Card (Left 2 Columns) - Dynamic & Role-tailored with MAC/ABAC Clearance */}
+        <div className="w-full">
+          {/* Active Case Card - Full Width Dynamic & Role-tailored with MAC/ABAC Clearance */}
           {(() => {
             const isCourtOfficer = hasRole('COURT_OFFICER');
             const isProsecutor = hasRole('PROSECUTOR');
@@ -1212,9 +1144,28 @@ export const DashboardPage = () => {
             const isAuditor = hasRole('AUDITOR');
             const isAdminOrSenior = hasRole('ADMIN') || hasRole('SENIOR_OFFICER');
 
+            if (!canReadCases) {
+              return (
+                <div className="col-span-full obsidian-card p-8 rounded-3xl flex flex-col items-center justify-center text-center space-y-4 border border-rose-500/40 bg-[#0B0D17] shadow-[0_10px_30px_rgba(244,63,94,0.1)]">
+                  <div className="w-14 h-14 rounded-2xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-400">
+                    <Lock className="w-7 h-7" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-500/10 border border-rose-500/30 text-rose-400 text-[10px] font-mono font-bold uppercase tracking-wider">
+                      <span>403 FORBIDDEN • ENTITLEMENT REVOKED</span>
+                    </div>
+                    <h3 className="text-base font-bold text-white">Case Dossier Access Revoked</h3>
+                    <p className="text-xs text-slate-300 max-w-md mx-auto">
+                      Your persona lacks the <span className="text-amber-400 font-mono font-bold">CASE_READ</span> authorization. Investigative dossiers cannot be displayed on the dashboard per the RBAC Security Matrix.
+                    </p>
+                  </div>
+                </div>
+              );
+            }
+
             if (!activeCase) {
               return (
-                <div className="lg:col-span-2 obsidian-card p-8 rounded-3xl flex flex-col items-center justify-center text-center space-y-4 border border-dashed border-white/10">
+                <div className="col-span-full obsidian-card p-8 rounded-3xl flex flex-col items-center justify-center text-center space-y-4 border border-dashed border-white/10">
                   <div className="w-12 h-12 rounded-2xl bg-violet-600/20 border border-violet-500/30 flex items-center justify-center text-violet-400">
                     <Filter className="w-6 h-6" />
                   </div>
@@ -1249,17 +1200,17 @@ export const DashboardPage = () => {
             const activePriority = activeCase.priority || 'HIGH';
 
             return (
-              <div className="lg:col-span-2 obsidian-card p-6 rounded-3xl flex flex-col justify-between space-y-4">
+              <div className="col-span-full obsidian-card p-6 sm:p-7 rounded-3xl flex flex-col justify-between space-y-5">
                 <div>
                   {/* Matching Cases Quick Navigation Switcher */}
                   {filteredCases.length > 1 && (
-                    <div className="flex items-center gap-1.5 overflow-x-auto pb-2 mb-2 border-b border-white/[0.04]">
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-2.5 mb-3 border-b border-white/[0.04]">
                       <span className="text-[10px] font-mono text-slate-400 font-semibold uppercase whitespace-nowrap">Matching ({filteredCases.length}):</span>
                       {filteredCases.map(c => (
                         <button
                           key={c.id}
                           onClick={() => setSelectedCaseId(c.id)}
-                          className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold transition cursor-pointer whitespace-nowrap ${
+                          className={`px-3 py-1 rounded-full text-[10px] font-mono font-bold transition cursor-pointer whitespace-nowrap ${
                             activeCase.id === c.id
                               ? 'bg-violet-600 text-white shadow-md shadow-violet-600/40 border border-violet-400/40'
                               : 'bg-[#141829] text-slate-400 hover:bg-[#1A2035] hover:text-white border border-white/[0.08]'
@@ -1271,25 +1222,25 @@ export const DashboardPage = () => {
                     </div>
                   )}
 
-                  <div className="flex items-center gap-1.5 text-xs text-slate-400 font-medium flex-wrap">
+                  <div className="flex items-center gap-2 text-xs text-slate-400 font-medium flex-wrap">
                     <span>Status:</span>
-                    <span className="font-mono text-[10px] px-2 py-0.5 rounded-full uppercase font-bold bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                    <span className="font-mono text-[10px] px-2.5 py-0.5 rounded-full uppercase font-bold bg-amber-500/10 text-amber-300 border border-amber-500/20">
                       {activeStatus.replace(/_/g, ' ')}
                     </span>
-                    <span className="ml-1 font-mono text-[10px] px-2 py-0.5 rounded-full uppercase font-bold bg-violet-500/10 text-violet-300 border border-violet-500/20">
+                    <span className="font-mono text-[10px] px-2.5 py-0.5 rounded-full uppercase font-bold bg-violet-500/10 text-violet-300 border border-violet-500/20">
                       {activeClassification}
                     </span>
-                    <span className="ml-1 font-mono text-[10px] px-2 py-0.5 rounded-full uppercase font-bold bg-rose-500/10 text-rose-300 border border-rose-500/20">
+                    <span className="font-mono text-[10px] px-2.5 py-0.5 rounded-full uppercase font-bold bg-rose-500/10 text-rose-300 border border-rose-500/20">
                       {activePriority} PRIORITY
                     </span>
                   </div>
 
-                  <div className="flex flex-wrap items-center justify-between gap-2 mt-2">
+                  <div className="flex flex-wrap items-center justify-between gap-3 mt-3">
                     <div className="flex items-center gap-3">
-                      <h3 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
+                      <h3 className="text-xl sm:text-2xl lg:text-3xl font-bold text-white tracking-tight">
                         {activeCaseTitle} ({activeCaseNumber})
                       </h3>
-                      <span className="w-6 h-6 rounded-lg bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-400 text-xs">
+                      <span className="w-7 h-7 rounded-lg bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-400 text-xs">
                         🔺
                       </span>
                     </div>
@@ -1301,23 +1252,14 @@ export const DashboardPage = () => {
                           navigator.clipboard?.writeText(refStr);
                           showToast(`Official Case Reference (${activeCaseNumber}) copied to clipboard`);
                         }}
-                        className="w-8 h-8 rounded-full bg-[#181D33] hover:bg-violet-600 border border-white/[0.08] flex items-center justify-center text-slate-300 hover:text-white transition cursor-pointer"
+                        className="w-9 h-9 rounded-full bg-[#181D33] hover:bg-violet-600 border border-white/[0.08] flex items-center justify-center text-slate-300 hover:text-white transition cursor-pointer"
                         title="Copy Case Identifier & Reference"
                       >
-                        <LinkIcon className="w-3.5 h-3.5" />
-                      </button>
-                      <button 
-                        onClick={() => {
-                          setShowDispatchModal(true);
-                        }}
-                        className="w-8 h-8 rounded-full bg-[#181D33] hover:bg-violet-600 border border-white/[0.08] flex items-center justify-center text-slate-300 hover:text-white transition cursor-pointer"
-                        title="Inter-Agency Secure Case Dispatch"
-                      >
-                        <Share2 className="w-3.5 h-3.5" />
+                        <LinkIcon className="w-4 h-4" />
                       </button>
                       <Link
                         to={`/cases/${activeCaseId}`}
-                        className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-[#181D33] hover:bg-violet-600 border border-white/[0.08] text-xs font-semibold text-slate-200 hover:text-white transition"
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#181D33] hover:bg-violet-600 border border-white/[0.08] text-xs font-semibold text-slate-200 hover:text-white transition"
                       >
                         <span>View Profile</span>
                         <ArrowUpRight className="w-3.5 h-3.5" />
@@ -1327,28 +1269,28 @@ export const DashboardPage = () => {
                 </div>
 
                 {/* Metric Figure & Action Pills Tailored by Role */}
-                <div className="pt-2 border-t border-white/[0.06] flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+                <div className="pt-4 border-t border-white/[0.06] flex flex-col sm:flex-row sm:items-end justify-between gap-4">
                   <div>
-                    <p className="text-[11px] text-slate-400 font-medium">
+                    <p className="text-xs text-slate-400 font-medium">
                       Sealed Evidence Payload Size
                     </p>
-                    <div className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight mt-0.5">
-                      {payloadSize} <span className="text-base text-violet-400 font-mono font-bold">{payloadUnit}</span>
+                    <div className="text-3xl sm:text-5xl font-extrabold text-white tracking-tight mt-1">
+                      {payloadSize} <span className="text-lg sm:text-xl text-violet-400 font-mono font-bold">{payloadUnit}</span>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 flex-wrap">
+                  <div className="flex items-center gap-3 flex-wrap">
                     {isAdminOrSenior ? (
                       <>
                         <button 
                           onClick={() => navigate(`/cases/${activeCaseId}`)}
-                          className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold transition shadow-lg shadow-violet-600/30 cursor-pointer"
+                          className="px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold transition shadow-lg shadow-violet-600/30 cursor-pointer"
                         >
                           Assign Lead
                         </button>
                         <button 
                           onClick={() => navigate((hasRole('ADMIN') || hasRole('SENIOR_OFFICER')) ? '/evidence' : (activeCaseId ? `/cases/${activeCaseId}` : '/cases'))}
-                          className="px-4 py-2 rounded-xl bg-[#181D33] hover:bg-[#202744] border border-white/[0.08] text-slate-300 hover:text-white text-xs font-semibold transition cursor-pointer"
+                          className="px-5 py-2.5 rounded-xl bg-[#181D33] hover:bg-[#202744] border border-white/[0.08] text-slate-300 hover:text-white text-xs font-semibold transition cursor-pointer"
                         >
                           Inspect Locker
                         </button>
@@ -1357,13 +1299,13 @@ export const DashboardPage = () => {
                       <>
                         <button 
                           onClick={() => navigate(`/cases/${activeCaseId}`)}
-                          className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold transition shadow-lg shadow-violet-600/30 cursor-pointer"
+                          className="px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold transition shadow-lg shadow-violet-600/30 cursor-pointer"
                         >
                           Review Dossier
                         </button>
                         <button 
                           onClick={() => navigate((hasRole('ADMIN') || hasRole('SENIOR_OFFICER')) ? '/documents' : (activeCaseId ? `/cases/${activeCaseId}` : '/cases'))}
-                          className="px-4 py-2 rounded-xl bg-[#181D33] hover:bg-[#202744] border border-white/[0.08] text-slate-300 hover:text-white text-xs font-semibold transition cursor-pointer"
+                          className="px-5 py-2.5 rounded-xl bg-[#181D33] hover:bg-[#202744] border border-white/[0.08] text-slate-300 hover:text-white text-xs font-semibold transition cursor-pointer"
                         >
                           Examine Evidence
                         </button>
@@ -1372,13 +1314,13 @@ export const DashboardPage = () => {
                       <>
                         <button 
                           onClick={() => navigate('/court')}
-                          className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold transition shadow-lg shadow-violet-600/30 cursor-pointer"
+                          className="px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold transition shadow-lg shadow-violet-600/30 cursor-pointer"
                         >
                           View Court File
                         </button>
                         <button 
                           onClick={() => navigate((hasRole('ADMIN') || hasRole('SENIOR_OFFICER')) ? '/documents' : (activeCaseId ? `/cases/${activeCaseId}` : '/court'))}
-                          className="px-4 py-2 rounded-xl bg-[#181D33] hover:bg-[#202744] border border-white/[0.08] text-slate-300 hover:text-white text-xs font-semibold transition cursor-pointer"
+                          className="px-5 py-2.5 rounded-xl bg-[#181D33] hover:bg-[#202744] border border-white/[0.08] text-slate-300 hover:text-white text-xs font-semibold transition cursor-pointer"
                         >
                           Public Exhibits
                         </button>
@@ -1387,13 +1329,13 @@ export const DashboardPage = () => {
                       <>
                         <button 
                           onClick={() => navigate('/audit')}
-                          className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold transition shadow-lg shadow-violet-600/30 cursor-pointer"
+                          className="px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold transition shadow-lg shadow-violet-600/30 cursor-pointer"
                         >
                           Audit Trail
                         </button>
                         <button 
                           onClick={() => navigate(`/cases/${activeCaseId}`)}
-                          className="px-4 py-2 rounded-xl bg-[#181D33] hover:bg-[#202744] border border-white/[0.08] text-slate-300 hover:text-white text-xs font-semibold transition cursor-pointer"
+                          className="px-5 py-2.5 rounded-xl bg-[#181D33] hover:bg-[#202744] border border-white/[0.08] text-slate-300 hover:text-white text-xs font-semibold transition cursor-pointer"
                         >
                           Inspect Dossier
                         </button>
@@ -1402,13 +1344,13 @@ export const DashboardPage = () => {
                       <>
                         <button 
                           onClick={() => navigate(`/cases/${activeCaseId}`)}
-                          className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold transition shadow-lg shadow-violet-600/30 cursor-pointer"
+                          className="px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold transition shadow-lg shadow-violet-600/30 cursor-pointer"
                         >
                           Forensic Analysis
                         </button>
                         <button 
                           onClick={() => navigate((hasRole('ADMIN') || hasRole('SENIOR_OFFICER')) ? '/evidence' : (activeCaseId ? `/cases/${activeCaseId}` : '/cases'))}
-                          className="px-4 py-2 rounded-xl bg-[#181D33] hover:bg-[#202744] border border-white/[0.08] text-slate-300 hover:text-white text-xs font-semibold transition cursor-pointer"
+                          className="px-5 py-2.5 rounded-xl bg-[#181D33] hover:bg-[#202744] border border-white/[0.08] text-slate-300 hover:text-white text-xs font-semibold transition cursor-pointer"
                         >
                           Evidence Artifacts
                         </button>
@@ -1418,13 +1360,13 @@ export const DashboardPage = () => {
                       <>
                         <button 
                           onClick={() => navigate(`/cases/${activeCaseId}`)}
-                          className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold transition shadow-lg shadow-violet-600/30 cursor-pointer"
+                          className="px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold transition shadow-lg shadow-violet-600/30 cursor-pointer"
                         >
                           View Dossier
                         </button>
                         <button 
                           onClick={() => navigate((hasRole('ADMIN') || hasRole('SENIOR_OFFICER')) ? '/evidence' : (activeCaseId ? `/cases/${activeCaseId}` : '/custody'))}
-                          className="px-4 py-2 rounded-xl bg-[#181D33] hover:bg-[#202744] border border-white/[0.08] text-slate-300 hover:text-white text-xs font-semibold transition cursor-pointer"
+                          className="px-5 py-2.5 rounded-xl bg-[#181D33] hover:bg-[#202744] border border-white/[0.08] text-slate-300 hover:text-white text-xs font-semibold transition cursor-pointer"
                         >
                           Inspect Locker
                         </button>
@@ -1435,136 +1377,8 @@ export const DashboardPage = () => {
               </div>
             );
           })()}
-
-          {/* Retention & Custody Timeline Panel (Right 1 Column) */}
-          <div className="obsidian-card p-6 rounded-3xl flex flex-col justify-between space-y-4">
-            <div>
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-sm font-bold text-white">
-                    Custody Retention Period
-                  </h3>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
-                    Statutory Holding Period
-                  </p>
-                </div>
-                <button
-                  onClick={cycleStatutoryCeiling}
-                  className="px-2.5 py-1 rounded-full bg-[#181D33] hover:bg-violet-600/30 text-xs font-bold text-slate-200 hover:text-violet-200 border border-white/[0.06] hover:border-violet-500/40 transition cursor-pointer"
-                  title="Click to cycle statutory holding ceiling"
-                >
-                  {statutoryCeiling}
-                </button>
-              </div>
-            </div>
-
-            {/* Interactive Scrubber / Timeline Bar */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-400 font-medium">Active Timeline:</span>
-                <span className="font-mono text-violet-300 font-bold px-2 py-0.5 rounded-full bg-violet-500/20 border border-violet-500/30">
-                  {retentionPeriod} Month
-                </span>
-              </div>
-
-              <div className="relative pt-2 pb-1">
-                <input
-                  type="range"
-                  min="1"
-                  max="12"
-                  value={retentionPeriod}
-                  onChange={(e) => setRetentionPeriod(Number(e.target.value))}
-                  className="w-full accent-violet-500 h-1.5 bg-[#181D33] rounded-lg appearance-none cursor-pointer"
-                />
-              </div>
-
-              {/* Ticks & Audio-like scrubber visualization */}
-              <div className="flex items-center justify-between gap-1 h-8 px-1">
-                {[...Array(24)].map((_, i) => {
-                  const isActive = i < retentionPeriod * 2;
-                  return (
-                    <button
-                      key={i}
-                      type="button"
-                      onClick={() => setRetentionPeriod(Math.ceil((i + 1) / 2))}
-                      className={`flex-1 rounded-full transition-all duration-200 hover:bg-violet-400 ${
-                        isActive
-                          ? 'bg-violet-500 shadow-sm shadow-violet-500/50 h-6'
-                          : 'bg-[#181D33] h-2.5 hover:h-4'
-                      }`}
-                      title={`Jump to Month ${Math.ceil((i + 1) / 2)}`}
-                    />
-                  );
-                })}
-              </div>
-
-              <div className="flex items-center justify-center pt-2">
-                <button
-                  onClick={() => {
-                    const nextState = !isPlayingTimeline;
-                    setIsPlayingTimeline(nextState);
-                    showToast(nextState ? '▶ Timeline playback started' : '⏸ Timeline playback paused');
-                  }}
-                  className={`w-9 h-9 rounded-full flex items-center justify-center text-white shadow-lg transition duration-200 ${
-                    isPlayingTimeline
-                      ? 'bg-violet-500 hover:bg-violet-400 shadow-violet-500/60 ring-4 ring-violet-500/20 animate-pulse'
-                      : 'bg-violet-600 hover:bg-violet-500 shadow-violet-600/40'
-                  }`}
-                  title={isPlayingTimeline ? 'Pause Timeline Playback' : 'Play Custody Timeline Simulation'}
-                >
-                  {isPlayingTimeline ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
-                </button>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
-
-      {/* Detailed Timeline Breakdown Modal (from Maximize2 button) */}
-      {showTimelineDetails && createPortal(
-        <div className="fixed inset-0 z-[99999] w-screen h-screen min-h-screen bg-black/95 backdrop-blur-2xl flex items-center justify-center p-4 animate-in fade-in duration-150">
-          <div className="obsidian-card w-full max-w-lg p-6 rounded-3xl shadow-2xl space-y-4 border border-white/10">
-            <div className="flex items-center justify-between border-b border-white/[0.08] pb-3">
-              <div className="flex items-center gap-2">
-                <div className="p-2 bg-violet-500/10 border border-violet-500/30 rounded-xl text-violet-400">
-                  <Clock className="w-4 h-4" />
-                </div>
-                <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-                  Statutory Custody Timeline Milestones
-                </h3>
-              </div>
-              <button onClick={() => setShowTimelineDetails(false)} className="text-slate-400 hover:text-white p-1 cursor-pointer">
-                ✕
-              </button>
-            </div>
-
-            <div className="space-y-3 text-xs">
-              <div className="p-3 rounded-2xl bg-[#121524] border border-white/[0.06] flex justify-between items-center">
-                <span className="text-slate-300">Selected Retention Horizon</span>
-                <span className="font-mono font-bold text-violet-400">{retentionPeriod} Months</span>
-              </div>
-              <div className="p-3 rounded-2xl bg-[#121524] border border-white/[0.06] flex justify-between items-center">
-                <span className="text-slate-300">Statutory Legal Ceiling</span>
-                <span className="font-mono font-bold text-amber-400">{statutoryCeiling}</span>
-              </div>
-              <div className="p-3 rounded-2xl bg-[#121524] border border-white/[0.06] flex justify-between items-center">
-                <span className="text-slate-300">Section 65B Integrity Status</span>
-                <span className="font-mono font-bold text-emerald-400">ACTIVE & SEALED</span>
-              </div>
-            </div>
-
-            <div className="pt-2 flex justify-end">
-              <button
-                onClick={() => setShowTimelineDetails(false)}
-                className="px-5 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold shadow-lg shadow-violet-600/30 cursor-pointer"
-              >
-                Close Milestone View
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
 
       {/* Inter-Agency Secure Case Dispatch Modal */}
       {showDispatchModal && createPortal(

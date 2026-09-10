@@ -5,7 +5,6 @@ import { checkUserPermission } from '../services/rbacService';
 const AuthContext = createContext(null);
 
 export const DEMO_ACCOUNTS = [
-  { username: 'ADMIN', role: 'ADMIN', clearance: 'TOP_SECRET', name: 'Chief System Administrator', desc: 'System administrator & security auditor', password: 'Admin@2026' },
   { username: 'admin', role: 'ADMIN', clearance: 'TOP_SECRET', name: 'Chief System Administrator', desc: 'System administrator & security auditor', password: 'Admin@2026' },
   { username: 'senior_officer', role: 'SENIOR_OFFICER', clearance: 'TOP_SECRET', name: 'Commissioner Sterling', desc: 'Case authorizer & supervisory team assigner', password: 'Password@2026!' },
   { username: 'investigator_a', role: 'INVESTIGATOR', clearance: 'SECRET', name: 'Det. John Miller (Lead)', desc: 'Assigned Lead Investigator on CASE-2026-001', password: 'Password@2026!' },
@@ -32,8 +31,8 @@ export const isUserLocked = (username) => {
   if (!username) return false;
   const clean = username.trim().toLowerCase();
 
-  // Root administrator and senior officers can NEVER be locked
-  if (clean === 'admin' || clean === 'senior_officer') return false;
+  // Root administrator can NEVER be locked
+  if (clean === 'admin') return false;
 
   try {
     const customUsers = JSON.parse(localStorage.getItem('sih_registered_users') || '[]');
@@ -51,7 +50,7 @@ export const isUserLocked = (username) => {
 export const setUserLockState = (username, locked) => {
   if (!username) return;
   const clean = username.trim().toLowerCase();
-  if (clean === 'admin' || clean === 'senior_officer') return;
+  if (clean === 'admin') return;
 
   try {
     const customUsers = JSON.parse(localStorage.getItem('sih_registered_users') || '[]');
@@ -79,11 +78,12 @@ export const getStoredCustomUsers = () => {
 export const getAvailableAccounts = () => {
   const customUsers = getStoredCustomUsers().map(u => ({
     username: u.username,
-    role: Array.isArray(u.roles) ? (typeof u.roles[0] === 'object' ? u.roles[0].name : u.roles[0]) : 'ADMIN',
-    clearance: u.securityClearance || 'TOP_SECRET',
+    role: Array.isArray(u.roles) ? (typeof u.roles[0] === 'object' ? u.roles[0].name : u.roles[0]) : (u.role || 'INVESTIGATOR'),
+    clearance: u.securityClearance || 'RESTRICTED',
     name: u.fullName || u.username,
     desc: `${u.department || 'Registered Officer'} (Custom Registered)`,
-    isLocked: isUserLocked(u.username)
+    isLocked: isUserLocked(u.username),
+    password: u.password || 'Officer@2026!'
   }));
 
   const map = new Map();
@@ -99,18 +99,22 @@ export const AuthProvider = ({ children }) => {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    // Purge any stale locked usernames on initial load
-    clearAllAccountLocks();
+    // Ensure root admin is never locked on startup
     setUserLockState('admin', false);
-    setUserLockState('senior_officer', false);
   }, []);
 
   const login = async (username, password) => {
-    setLoading(true);
     setError(null);
     try {
       const cleanUser = (username || '').trim();
       const cleanPass = (password || '').trim();
+
+      // 0. Check account lock state FIRST — before any API or credential check
+      if (isUserLocked(cleanUser)) {
+        const err = new Error('ACCOUNT_LOCKED: Your account has been locked by the administrator. Please contact your system administrator to restore access.');
+        err.code = 'ACCOUNT_LOCKED';
+        throw err;
+      }
 
       // 1. Try Backend API first if reachable
       try {
@@ -122,11 +126,23 @@ export const AuthProvider = ({ children }) => {
         }
       } catch (apiErr) {
         const msg = (apiErr.message || '').toLowerCase();
+        const isNetworkOrTimeout = apiErr.name === 'AbortError' || msg.includes('failed to fetch') || msg.includes('network') || msg.includes('load failed');
+        const isImmuneAdmin = cleanUser.toLowerCase() === 'admin';
+
         if (msg.includes('locked') || msg.includes('disabled') || msg.includes('suspended') || msg.includes('consecutive') || msg.includes('wait') || msg.includes('failed attempts')) {
-          setUserLockState(cleanUser, true);
-          throw apiErr;
+          if (!isImmuneAdmin) {
+            setUserLockState(cleanUser, true);
+            throw apiErr;
+          }
+          console.warn('Backend returned lock error for administrative root account. Overriding with administrative immunity.');
+          // Do not throw for admin — continue to vault credential check!
         }
-        console.warn('Backend authentication note, applying vault credentials:', apiErr.message);
+        if (!isNetworkOrTimeout && apiErr.status === 401 && !msg.includes('locked')) {
+          // Real 401 from backend (wrong password on a backend user) — show proper error
+          throw new Error('Invalid username or password. Please verify your credentials.');
+        }
+        // Network/timeout error — silently fall through to demo credential check
+        console.warn('Backend unreachable or immune fallback, applying offline vault credentials:', apiErr.message);
       }
 
       // 2. Client / Standalone Authentication validation
@@ -164,8 +180,6 @@ export const AuthProvider = ({ children }) => {
     } catch (err) {
       setError(err.message || 'Authentication failed.');
       throw err;
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -236,6 +250,16 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const [permVersion, setPermVersion] = useState(0);
+
+  useEffect(() => {
+    const handlePermUpdate = () => {
+      setPermVersion(v => v + 1);
+    };
+    window.addEventListener('role-permissions-updated', handlePermUpdate);
+    return () => window.removeEventListener('role-permissions-updated', handlePermUpdate);
+  }, []);
+
   const hasRole = (role) => {
     if (!user) return false;
     const cleanRole = (role || '').replace(/^ROLE_/, '').toUpperCase();
@@ -250,6 +274,9 @@ export const AuthProvider = ({ children }) => {
   };
 
   const hasPermission = (permissionName) => {
+    if (!permissionName) return false;
+    // permVersion is referenced to ensure component re-renders on matrix updates
+    void permVersion;
     return checkUserPermission(user, permissionName);
   };
 
@@ -267,6 +294,7 @@ export const AuthProvider = ({ children }) => {
         logout,
         hasRole,
         hasPermission,
+        permVersion,
         clearAllAccountLocks,
         setUserLockState,
       }}

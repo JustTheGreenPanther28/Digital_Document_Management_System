@@ -38,11 +38,17 @@ async function request(endpoint, options = {}) {
     headers['Content-Type'] = 'application/json';
   }
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 4000); // 4-second timeout
+
   const res = await fetch(`${API_BASE}${endpoint}`, {
     ...options,
     credentials: 'include', // Support HttpOnly/Secure/SameSite session cookies
     headers,
+    signal: controller.signal,
   });
+
+  clearTimeout(timeoutId);
 
   if (!res.ok) {
     if (res.status === 401 && !endpoint.includes('/auth/login')) {
@@ -267,6 +273,10 @@ export const api = {
     method: 'POST',
     body: JSON.stringify(data),
   }),
+  bulkCreateUsers: (usersList) => request('/users/bulk', {
+    method: 'POST',
+    body: JSON.stringify(usersList),
+  }),
   updateUserStatus: (id, enabled, locked) => request(`/users/${id}/status`, {
     method: 'PATCH',
     body: JSON.stringify({ enabled, locked }),
@@ -306,10 +316,12 @@ export const api = {
   }),
   getAiResults: (caseId) => request(`/ai/results/case/${caseId}`),
   getAiResultById: (id) => request(`/ai/results/${id}`),
-  getAiStatus: () => request('/ai/status'),
-  guideChat: (query, language) => request('/ai/guide-chat', {
-    method: 'POST',
-    body: JSON.stringify({ query, language }),
+  // ─── RBAC Role & Permission Management ──────────────────────────────
+  getRoles: () => request('/admin/roles'),
+  getPermissions: () => request('/admin/permissions'),
+  updateRolePermissions: (roleId, permissionIds) => request(`/admin/roles/${roleId}/permissions`, {
+    method: 'PUT',
+    body: JSON.stringify(permissionIds),
   }),
 };
 

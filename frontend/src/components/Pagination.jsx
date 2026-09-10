@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 
 export const Pagination = ({
@@ -8,7 +8,8 @@ export const Pagination = ({
   onPageChange,
   onPageSizeChange,
   pageSizeOptions = [6, 12, 24],
-  itemLabel = 'items'
+  itemLabel = 'items',
+  className = ''
 }) => {
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
   const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
@@ -37,7 +38,7 @@ export const Pagination = ({
   };
 
   return (
-    <div className="obsidian-card p-3 sm:p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 text-xs select-none border border-white/[0.06]">
+    <div className={`p-3 sm:p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 text-xs select-none border border-white/[0.06] ${className || 'obsidian-card'}`}>
       {/* 1. Item Counter Info */}
       <div className="text-slate-400 font-mono flex items-center gap-1.5">
         <span>Showing</span>

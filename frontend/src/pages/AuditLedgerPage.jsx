@@ -73,7 +73,7 @@ import { getStoredCustomAuditLogs } from '../services/auditLogger';
 import Pagination from '../components/Pagination';
 
 export const AuditLedgerPage = () => {
-  const { user, hasRole } = useAuth();
+  const { user, hasRole, hasPermission } = useAuth();
   const navigate = useNavigate();
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -86,7 +86,8 @@ export const AuditLedgerPage = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
-  const isAuthorizedAuditor = hasRole('AUDITOR') || hasRole('ADMIN') || hasRole('SENIOR_OFFICER');
+  const canVerifyLedger = hasPermission ? hasPermission('AUDIT_VERIFY_LEDGER') : (hasRole('AUDITOR') || hasRole('ADMIN') || hasRole('SENIOR_OFFICER'));
+  const isAuthorizedAuditor = canVerifyLedger || hasRole('AUDITOR') || hasRole('ADMIN') || hasRole('SENIOR_OFFICER');
 
   useEffect(() => {
     if (isAuthorizedAuditor) {
@@ -342,14 +343,25 @@ export const AuditLedgerPage = () => {
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-cyan-400' : ''}`} />
           </button>
 
-          <button
-            onClick={handleVerifyChain}
-            disabled={verifying}
-            className="px-5 py-2.5 rounded-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-semibold shadow-lg shadow-emerald-600/30 flex items-center gap-2 border border-emerald-400/30 transition group disabled:opacity-50"
-          >
-            <ShieldCheck className={`w-4 h-4 text-emerald-200 group-hover:scale-110 transition ${verifying ? 'animate-spin' : ''}`} />
-            <span>{verifying ? 'Verifying Integrity...' : 'Verify Ledger Integrity'}</span>
-          </button>
+          {canVerifyLedger ? (
+            <button
+              onClick={handleVerifyChain}
+              disabled={verifying}
+              className="px-5 py-2.5 rounded-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-semibold shadow-lg shadow-emerald-600/30 flex items-center gap-2 border border-emerald-400/30 transition group disabled:opacity-50 cursor-pointer"
+            >
+              <ShieldCheck className={`w-4 h-4 text-emerald-200 group-hover:scale-110 transition ${verifying ? 'animate-spin' : ''}`} />
+              <span>{verifying ? 'Verifying Integrity...' : 'Verify Ledger Integrity'}</span>
+            </button>
+          ) : (
+            <button
+              disabled
+              className="px-4 py-2 rounded-full bg-slate-800 text-slate-500 text-xs font-mono border border-slate-700 cursor-not-allowed opacity-60"
+              title="Verification capability requires AUDIT_VERIFY_LEDGER entitlement"
+            >
+              <Shield className="w-3.5 h-3.5" />
+              <span>Audit Action Restricted</span>
+            </button>
+          )}
         </div>
       </div>
 

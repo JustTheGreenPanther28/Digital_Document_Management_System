@@ -30,7 +30,22 @@ The **Secure Digital Case Management, Document Management & Evidence Chain-of-Cu
 4. **Tamper-Evident Hash-Chained Audit Ledger**:
    - Merkle-like sequential hash chain: $\text{Hash}_n = \text{SHA-256}(\text{Log}_n + \text{Hash}_{n-1})$.
    - Automated continuous verification. If a rogue DBA alters any row, the chain breaks and triggers automated alerts.
-5. **Role-Adaptive Command Frontends**: Tailored workflows for 8 specialized personas:
+5. **Bulk Officer Ingestion with Heuristic Antivirus & CSV Sanitization**:
+   - Multi-stage pre-ingestion validation pipeline: Magic-byte binary header inspection (`MZ`, `ELF`, `PK`, `ZIP`), active script vector interception (`<script>`, `powershell`, `wscript`), EICAR virus signature matching, and CWE-1236 Dynamic Data Exchange (DDE) formula injection defense (`=cmd|'`, `@cmd`, `+cmd`, `-cmd`).
+   - Cryptographic SHA-256 evidentiary hash calculation and Section 65B legal chain-of-custody logging.
+   - Batch provisioning for administrators and senior officers via `POST /api/v1/users/bulk`.
+6. **Root Administrator Lockout Immunity & Security Hardening**:
+   - Permanent protection against denial-of-service lockout attacks targeting root administrative accounts (`ADMIN`), preventing brute-force lockout vectors while strictly locking non-admin targets upon exceeding threshold attempts.
+7. **Fine-Grained Role & Permission Matrix with Real-Time ABAC Enforcement**:
+   - Interactive permission matrix with instantaneous dynamic permission revocation and pagination.
+   - Strict runtime ABAC enforcement: revoking `CASE_READ` or `CASE_CREATE` dynamically hides case dossiers, navigational links, quick actions, and blocks direct route access.
+8. **Officer-Friendly Backup & Disaster Recovery Console**:
+   - Clean, reassuring, non-technical disaster recovery dashboard replacing technical jargon.
+   - 3-column subsystem architecture cards (Case Database Records, Digital Evidence Vault, Disaster Readiness).
+   - "Create Instant Backup" wizard with animated live progress and local persistence.
+   - Interactive non-destructive "Recovery Health Test" dry-run verifying cryptographic SHA-256 checksums and AES-256-GCM integrity.
+   - Full history table search, type filtering, and pagination.
+9. **Role-Adaptive Command Frontends**: Tailored workflows for 8 specialized personas:
    - `ADMIN`, `SENIOR_OFFICER`, `INVESTIGATOR`, `EVIDENCE_CUSTODIAN`, `FORENSIC_OFFICER`, `PROSECUTOR`, `COURT_OFFICER`, `AUDITOR`.
 
 ---
@@ -178,9 +193,9 @@ sih190-case-management/
 │   ├── src/
 │   │   ├── components/           # Navbar, Sidebar, modals
 │   │   ├── context/              # AuthContext, JWT persistence, quick role switcher
-│   │   ├── pages/                # Dashboard, Cases, CaseDetails, Evidence, Custody, Audit, Vault
-│   │   ├── services/             # API client with JWT bearer interceptor
-│   │   ├── App.jsx               # Router & ProtectedLayout
+│   │   ├── pages/                # Dashboard, Cases, CaseDetails, Evidence, Custody, Audit, Vault, Backup
+│   │   ├── services/             # API client, csvValidatorService (Antivirus scanner), abac, rbacService
+│   │   ├── App.jsx               # Router & ProtectedLayout with ABAC Route Guards
 │   │   └── index.css             # Tailwind dark tactical vault theme
 │   ├── Dockerfile                # Multi-stage Node builder + Nginx Alpine runner
 │   ├── nginx.conf                # Reverse proxy with hardened security headers

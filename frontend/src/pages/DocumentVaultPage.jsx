@@ -79,12 +79,15 @@ import { logDocumentDownload, logDocumentUpload } from '../services/auditLogger'
 import { saveVaultDocumentSafe, getVaultDocumentsSafe, getVaultFile } from '../services/vaultFileStorage';
 
 export const DocumentVaultPage = () => {
-  const { user, hasRole } = useAuth();
+  const { user, hasRole, hasPermission } = useAuth();
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [cases, setCases] = useState([]);
   
+  const canUpload = hasPermission ? hasPermission('DOCUMENT_UPLOAD') : true;
+  const canDownload = hasPermission ? hasPermission('DOCUMENT_DOWNLOAD') : true;
+
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadCaseId, setUploadCaseId] = useState('');
   const [docTitle, setDocTitle] = useState('');
@@ -353,13 +356,15 @@ modification, tamper event, or parity mismatch was detected during verification.
           </p>
         </div>
 
-        <button
-          onClick={() => setShowUploadModal(true)}
-          className="px-4 py-2 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-semibold flex items-center gap-2 shadow-lg shadow-blue-600/30 transition border border-blue-400/30 cursor-pointer"
-        >
-          <Upload className="w-4 h-4" />
-          <span>Upload Vault Artifact</span>
-        </button>
+        {canUpload && (
+          <button
+            onClick={() => setShowUploadModal(true)}
+            className="px-4 py-2 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-semibold flex items-center gap-2 shadow-lg shadow-blue-600/30 transition border border-blue-400/30 cursor-pointer"
+          >
+            <Upload className="w-4 h-4" />
+            <span>Upload Vault Artifact</span>
+          </button>
+        )}
       </div>
 
       <div className="obsidian-card p-4 rounded-3xl flex items-center gap-3">
@@ -452,25 +457,25 @@ modification, tamper event, or parity mismatch was detected during verification.
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2.5 flex-shrink-0">
-                    {isAuthorized ? (
-                      <button
-                        onClick={() => handleDownload(doc)}
-                        className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold uppercase tracking-wider flex items-center gap-1.5 transition whitespace-nowrap cursor-pointer shadow-md shadow-blue-600/30 active:scale-95"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                        <span>Download</span>
-                      </button>
-                    ) : (
-                      <button
-                        disabled
-                        className="px-3.5 py-2 rounded-xl bg-slate-800/80 text-slate-500 border border-slate-700/60 text-xs font-semibold uppercase tracking-wider flex items-center gap-1.5 cursor-not-allowed opacity-75"
-                        title={`Access Blocked: Your clearance level (${user?.clearance || 'PUBLIC'}) cannot download ${doc.classification} documents.`}
-                      >
-                        <Lock className="w-3.5 h-3.5 text-rose-400" />
-                        <span>Locked</span>
-                      </button>
-                    )}
+                    <div className="flex items-center gap-2.5 flex-shrink-0">
+                      {(isAuthorized && canDownload) ? (
+                        <button
+                          onClick={() => handleDownload(doc)}
+                          className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold uppercase tracking-wider flex items-center gap-1.5 transition whitespace-nowrap cursor-pointer shadow-md shadow-blue-600/30 active:scale-95"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          <span>Download</span>
+                        </button>
+                      ) : (
+                        <button
+                          disabled
+                          className="px-3.5 py-2 rounded-xl bg-slate-800/80 text-slate-500 border border-slate-700/60 text-xs font-semibold uppercase tracking-wider flex items-center gap-1.5 cursor-not-allowed opacity-75"
+                          title={!canDownload ? 'Access Blocked: Your persona lacks the DOCUMENT_DOWNLOAD entitlement.' : `Access Blocked: Your clearance level (${user?.clearance || 'PUBLIC'}) cannot download ${doc.classification} documents.`}
+                        >
+                          <Lock className="w-3.5 h-3.5 text-rose-400" />
+                          <span>Locked</span>
+                        </button>
+                      )}
                     <Link
                       to={`/cases/${doc.caseId}`}
                       className="px-3 py-2 rounded-xl bg-[#181D33] hover:bg-[#202744] text-slate-300 hover:text-white transition flex items-center gap-1.5 text-xs font-mono border border-slate-700/60 active:scale-95"

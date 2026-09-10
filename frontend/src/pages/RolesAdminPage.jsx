@@ -10,6 +10,7 @@ import {
   saveStoredRolePermissions, 
   resetRolePermissionsToDefault 
 } from '../services/rbacService';
+import Pagination from '../components/Pagination';
 import { 
   Key, 
   Layers, 
@@ -32,6 +33,17 @@ import {
   Square
 } from 'lucide-react';
 
+const ROLE_DISPLAY_NAMES = {
+  ADMIN: 'ADMIN',
+  SENIOR_OFFICER: 'SENIOR',
+  INVESTIGATOR: 'INVST',
+  EVIDENCE_CUSTODIAN: 'CUSTODIAN',
+  FORENSIC_OFFICER: 'FORENSIC',
+  PROSECUTOR: 'PROSECUTOR',
+  COURT_OFFICER: 'COURT',
+  AUDITOR: 'AUDITOR',
+};
+
 export const RolesAdminPage = () => {
   const { user, hasRole } = useAuth();
   const navigate = useNavigate();
@@ -45,10 +57,17 @@ export const RolesAdminPage = () => {
   const [successMsg, setSuccessMsg] = useState('');
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(6);
 
   const isAdmin = hasRole('ADMIN') || user?.username?.toLowerCase() === 'admin';
-  const isSeniorOfficer = hasRole('SENIOR_OFFICER');
+  const isSeniorOfficer = hasRole('SENIOR_OFFICER') || user?.username?.toLowerCase() === 'senior_officer';
   const isAuthorized = isAdmin || isSeniorOfficer;
+  const canEditPermissions = isAuthorized;
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedCategory, search]);
 
   useEffect(() => {
     if (isAuthorized) {
@@ -99,9 +118,14 @@ export const RolesAdminPage = () => {
     });
   }, [permissions, selectedCategory, search]);
 
+  const paginatedPermissions = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+    return filteredPermissions.slice(startIndex, startIndex + pageSize);
+  }, [filteredPermissions, currentPage, pageSize]);
+
   const togglePermission = (roleName, permName) => {
-    if (!isAdmin) {
-      alert('Read-Only Audit Mode: Only Root Administrators can modify the system RBAC Matrix.');
+    if (!canEditPermissions) {
+      alert('Read-Only Audit Mode: Only Administrators and Senior Officers can modify the system RBAC Matrix.');
       return;
     }
     setRolePermsMap(prev => {
@@ -109,18 +133,45 @@ export const RolesAdminPage = () => {
       const updatedList = currentList.includes(permName)
         ? currentList.filter(p => p !== permName)
         : [...currentList, permName];
-      return {
+      const updated = {
         ...prev,
         [roleName]: updatedList
       };
+      saveStoredRolePermissions(updated);
+
+      // Async sync to backend API if applicable
+      const targetRole = roles.find(r => r.name === roleName);
+      if (targetRole && targetRole.id) {
+        const permIds = permissions
+          .filter(p => updatedList.includes(p.name))
+          .map(p => p.id);
+        api.updateRolePermissions(targetRole.id, permIds).catch(() => null);
+      }
+
+      return updated;
     });
     setHasChanges(true);
-    setSuccessMsg('');
+    setSuccessMsg(`Updated ${permName} for ${roleName} in real-time.`);
+    setTimeout(() => setSuccessMsg(''), 3000);
   };
 
-  const handleSave = () => {
-    if (!isAdmin) return;
+  const handleSave = async () => {
+    if (!canEditPermissions) return;
     const ok = saveStoredRolePermissions(rolePermsMap);
+
+    // Sync all roles to backend if role IDs exist
+    try {
+      for (const r of roles) {
+        if (r.id && rolePermsMap[r.name]) {
+          const allowedNames = rolePermsMap[r.name] || [];
+          const permIds = permissions
+            .filter(p => allowedNames.includes(p.name))
+            .map(p => p.id);
+          await api.updateRolePermissions(r.id, permIds).catch(() => null);
+        }
+      }
+    } catch (_) {}
+
     if (ok) {
       setHasChanges(false);
       setSuccessMsg('RBAC Entitlement Matrix successfully committed to persistent security storage.');
@@ -131,7 +182,7 @@ export const RolesAdminPage = () => {
   };
 
   const handleReset = () => {
-    if (!isAdmin) return;
+    if (!canEditPermissions) return;
     if (window.confirm('Reset all roles to canonical statutory security baseline?')) {
       const defaults = resetRolePermissionsToDefault();
       setRolePermsMap(defaults);
@@ -142,7 +193,7 @@ export const RolesAdminPage = () => {
   };
 
   const handleToggleAllForRole = (roleName) => {
-    if (!isAdmin) return;
+    if (!canEditPermissions) return;
     const currentList = rolePermsMap[roleName] || [];
     const allFilteredPermNames = filteredPermissions.map(p => p.name);
     const allActive = allFilteredPermNames.every(pName => currentList.includes(pName));
@@ -157,9 +208,13 @@ export const RolesAdminPage = () => {
         // Add all currently filtered
         updated = Array.from(new Set([...existing, ...allFilteredPermNames]));
       }
-      return { ...prev, [roleName]: updated };
+      const newMap = { ...prev, [roleName]: updated };
+      saveStoredRolePermissions(newMap);
+      return newMap;
     });
     setHasChanges(true);
+    setSuccessMsg(`All visible permissions updated for ${roleName} in real-time.`);
+    setTimeout(() => setSuccessMsg(''), 3000);
   };
 
   if (!isAuthorized) {
@@ -247,7 +302,7 @@ export const RolesAdminPage = () => {
               </span>
             )}
 
-            {isAdmin && (
+            {canEditPermissions && (
               <>
                 <button
                   onClick={handleReset}
@@ -328,14 +383,14 @@ export const RolesAdminPage = () => {
       {/* Interactive Permission Matrix Table Card */}
       <div className="obsidian-card p-5 sm:p-6 rounded-3xl space-y-5">
         {/* Matrix Controls & Search */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3.5">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-2 border-b border-white/[0.06]">
           {/* Category Filter Pills */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none custom-scrollbar-x">
+          <div className="flex items-center gap-1.5 flex-wrap">
             {categories.map((cat) => (
               <button
                 key={cat}
                 onClick={() => setSelectedCategory(cat)}
-                className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition cursor-pointer ${
+                className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition cursor-pointer ${
                   selectedCategory === cat
                     ? 'bg-violet-600 text-white shadow-md shadow-violet-600/30'
                     : 'bg-[#121524] text-slate-400 hover:text-white border border-white/[0.06]'
@@ -347,37 +402,39 @@ export const RolesAdminPage = () => {
           </div>
 
           {/* Search Box */}
-          <div className="relative w-full md:w-72 shrink-0">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+          <div className="relative w-full sm:w-64 shrink-0">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              placeholder="Filter permissions by keyword..."
+              placeholder="Filter permissions..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-9 pr-3.5 py-1.5 bg-[#121524] border border-white/[0.08] rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-violet-500"
+              className="w-full pl-9 pr-3.5 py-1.5 bg-[#121524] border border-white/[0.08] rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-violet-500 font-mono"
             />
           </div>
         </div>
 
         {/* Matrix Table */}
-        <div className="overflow-x-auto rounded-2xl border border-white/[0.08] bg-[#0A0D18]">
+        <div className="overflow-x-auto rounded-2xl border border-white/[0.08] bg-[#0A0D18] custom-scrollbar-x">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
               <tr className="bg-[#121524] text-slate-300 border-b border-white/[0.08] font-mono">
-                <th className="p-3.5 min-w-[240px] font-bold text-white uppercase tracking-wider sticky left-0 bg-[#121524] z-10 border-r border-white/[0.08]">
+                <th className="p-3 min-w-[200px] max-w-[240px] font-bold text-white uppercase tracking-wider sticky left-0 bg-[#121524] z-10 border-r border-white/[0.08]">
                   Permission & Scope ({filteredPermissions.length})
                 </th>
                 {roles.map((r) => (
-                  <th key={r.id || r.name} className="p-3 text-center min-w-[110px]">
-                    <div className="flex flex-col items-center gap-1">
-                      <span className="font-bold text-[11px] text-slate-200">{r.name}</span>
-                      {isAdmin && (
+                  <th key={r.id || r.name} className="p-2 text-center min-w-[78px] sm:min-w-[88px]">
+                    <div className="flex flex-col items-center gap-0.5">
+                      <span className="font-bold text-[10.5px] text-slate-200 tracking-tight font-mono" title={r.displayName || r.name}>
+                        {ROLE_DISPLAY_NAMES[r.name] || r.name}
+                      </span>
+                      {canEditPermissions && (
                         <button
                           onClick={() => handleToggleAllForRole(r.name)}
-                          className="text-[10px] text-violet-400 hover:text-violet-300 underline cursor-pointer"
+                          className="text-[9px] text-violet-400 hover:text-violet-300 underline cursor-pointer"
                           title="Toggle all currently filtered permissions for this role"
                         >
-                          Toggle All
+                          Toggle
                         </button>
                       )}
                     </div>
@@ -386,7 +443,7 @@ export const RolesAdminPage = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-white/[0.05]">
-              {filteredPermissions.map((perm) => {
+              {paginatedPermissions.map((perm) => {
                 return (
                   <tr key={perm.id || perm.name} className="hover:bg-white/[0.02] transition group">
                     {/* Permission Info (Sticky Column) */}
@@ -417,14 +474,14 @@ export const RolesAdminPage = () => {
                           <button
                             type="button"
                             onClick={() => togglePermission(r.name, perm.name)}
-                            disabled={!isAdmin}
-                            className={`w-7 h-7 mx-auto rounded-lg flex items-center justify-center transition ${
+                            disabled={!canEditPermissions}
+                            className={`w-7 h-7 mx-auto rounded-lg flex items-center justify-center transition select-none ${
                               isGranted
                                 ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 hover:bg-emerald-500/30'
                                 : 'bg-slate-900/60 text-slate-600 border border-white/[0.05] hover:text-slate-400'
-                            } ${isAdmin ? 'cursor-pointer hover:scale-110' : 'cursor-default'}`}
+                            } ${canEditPermissions ? 'cursor-pointer hover:scale-110 active:scale-90' : 'cursor-not-allowed opacity-60'}`}
                             title={
-                              isAdmin
+                              canEditPermissions
                                 ? `Click to ${isGranted ? 'revoke' : 'grant'} ${perm.name} for ${r.name}`
                                 : `${perm.name} is ${isGranted ? 'granted' : 'denied'} for ${r.name}`
                             }
@@ -453,6 +510,18 @@ export const RolesAdminPage = () => {
           </table>
         </div>
 
+        {/* Pagination Controls */}
+        <Pagination
+          currentPage={currentPage}
+          totalItems={filteredPermissions.length}
+          pageSize={pageSize}
+          onPageChange={setCurrentPage}
+          onPageSizeChange={setPageSize}
+          pageSizeOptions={[6, 10, 15, 25]}
+          itemLabel="permissions"
+          className="bg-[#0D1020] border border-white/[0.08]"
+        />
+
         {/* Matrix Legend & Guidance */}
         <div className="p-4 rounded-2xl bg-[#121524] border border-white/[0.06] text-xs text-slate-400 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div className="flex items-center gap-4">
@@ -467,7 +536,7 @@ export const RolesAdminPage = () => {
           </div>
 
           <div className="text-[11px] text-slate-500 font-mono">
-            {isAdmin ? 'Click any cell to toggle permission • Save changes to persist' : 'Supervisory Audit Mode (Read-Only)'}
+            {canEditPermissions ? 'Click any cell to toggle permission • Saved in real-time' : 'Supervisory Audit Mode (Read-Only)'}
           </div>
         </div>
       </div>

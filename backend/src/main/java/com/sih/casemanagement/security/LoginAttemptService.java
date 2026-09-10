@@ -44,6 +44,10 @@ public class LoginAttemptService {
 
     @Transactional
     public void loginFailed(String username) {
+        if ("admin".equalsIgnoreCase(username)) {
+            log.info("Administrative account {} is immune to failed login lockout.", username);
+            return;
+        }
         userRepository.findByUsernameIgnoreCase(username).ifPresent(user -> {
             int newAttempts = user.getFailedLoginAttempts() + 1;
             user.setFailedLoginAttempts(newAttempts);
@@ -59,6 +63,9 @@ public class LoginAttemptService {
 
     @Transactional
     public boolean isAccountLocked(User user) {
+        if ("admin".equalsIgnoreCase(user.getUsername())) {
+            return false;
+        }
         if (!user.isAccountLocked()) {
             return false;
         }

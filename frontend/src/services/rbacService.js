@@ -172,13 +172,13 @@ export function checkUserPermission(user, permissionName) {
   const userRoles = Array.isArray(user?.roles) ? user.roles : (user?.role ? [user.role] : []);
   const normalized = userRoles.map(r => (typeof r === 'string' ? r : r?.name || '').replace(/^ROLE_/, '').toUpperCase());
 
-  if (normalized.includes('ADMIN') || user?.username?.toLowerCase() === 'admin') {
-    return true;
+  if (user?.username?.toLowerCase() === 'admin' && !normalized.includes('ADMIN')) {
+    normalized.push('ADMIN');
   }
 
   const mapping = getStoredRolePermissions();
   return normalized.some(role => {
-    const perms = mapping[role] || DEFAULT_ROLE_PERMISSIONS[role] || [];
+    const perms = mapping[role] !== undefined ? mapping[role] : (DEFAULT_ROLE_PERMISSIONS[role] || []);
     return perms.includes(permissionName);
   });
 }

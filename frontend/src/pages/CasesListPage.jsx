@@ -100,7 +100,7 @@ const FALLBACK_CASES = [
 ];
 
 export const CasesListPage = () => {
-  const { hasRole, user } = useAuth();
+  const { hasRole, user, hasPermission } = useAuth();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -114,7 +114,7 @@ export const CasesListPage = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [modalError, setModalError] = useState('');
 
-  const canCreate = hasRole && (hasRole('SENIOR_OFFICER') || hasRole('ADMIN') || hasRole('INVESTIGATOR'));
+  const canCreate = hasPermission ? hasPermission('CASE_CREATE') : (hasRole('SENIOR_OFFICER') || hasRole('ADMIN') || hasRole('INVESTIGATOR'));
 
   // Auto-open modal if navigated from "New Dossier" button
   useEffect(() => {
@@ -122,7 +122,7 @@ export const CasesListPage = () => {
       if (canCreate) {
         setShowCreateModal(true);
       } else {
-        alert('ACCESS DENIED: Case dossier creation is restricted to Senior Officers, Lead Investigators, and Administrators.');
+        alert('ACCESS DENIED: Your current persona lacks the CASE_CREATE authorization granted in the Security Matrix.');
       }
       if (searchParams.get('new') === 'true') {
         const next = new URLSearchParams(searchParams);
@@ -318,6 +318,8 @@ export const CasesListPage = () => {
 
   const isAdmin = hasRole('ADMIN');
 
+  const canReadCases = hasPermission ? hasPermission('CASE_READ') : true;
+
   // Mandatory Access Control (MAC): strictly filter out cases exceeding user's clearance level
   const clearedCases = cases.filter((c) => canClearanceAccess(user?.clearance, c.classification));
 
@@ -326,11 +328,11 @@ export const CasesListPage = () => {
     return { ...c, access };
   });
 
-  const myAccessibleCount = evaluatedCases.filter(c => c.access.allowed).length;
+  const myAccessibleCount = canReadCases ? evaluatedCases.filter(c => c.access.allowed).length : 0;
   const restrictedCount = evaluatedCases.filter(c => !c.access.allowed).length;
 
-  // Strict Person-Level Isolation: Non-admin officers only see cases assigned to them
-  const poolCases = isAdmin ? evaluatedCases : evaluatedCases.filter(c => c.access.allowed);
+  // Strict Person-Level Isolation: If CASE_READ revoked, show zero cases; else non-admin officers only see cases assigned to them
+  const poolCases = !canReadCases ? [] : (isAdmin ? evaluatedCases : evaluatedCases.filter(c => c.access.allowed));
 
   const filteredCases = poolCases.filter((c) => {
     const matchesSearch = 
@@ -397,8 +399,45 @@ export const CasesListPage = () => {
         </div>
       )}
 
-      {/* Scope Selector: All vs My Assigned vs Restricted (For Admin Supervision) */}
-      {isAdmin ? (
+      {/* Cases Content Area: 403 Revoked Notice or Case List */}
+      {!canReadCases ? (
+        <div className="obsidian-card p-8 sm:p-12 rounded-3xl border border-rose-500/40 text-center space-y-6 max-w-xl mx-auto my-8 select-none shadow-[0_20px_50px_rgba(244,63,94,0.18)] bg-[#0B0D17]">
+          <div className="w-16 h-16 rounded-3xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center mx-auto text-rose-400 shadow-lg shadow-rose-500/20">
+            <ShieldAlert className="w-8 h-8" />
+          </div>
+
+          <div className="space-y-2">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-500/10 border border-rose-500/30 text-rose-400 text-[10px] font-mono font-bold uppercase tracking-wider">
+              <Lock className="w-3 h-3" />
+              <span>403 FORBIDDEN • ENTITLEMENT REVOKED</span>
+            </div>
+            <h2 className="text-xl font-bold text-white tracking-tight">
+              Case Dossier Access Revoked
+            </h2>
+            <p className="text-xs text-slate-300 leading-relaxed max-w-md mx-auto">
+              Your persona lacks the <span className="text-amber-400 font-mono font-bold">CASE_READ</span> authorization. Access to investigative dossiers has been explicitly revoked in the RBAC Security Matrix.
+            </p>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-[#121524] border border-white/[0.06] text-[11px] font-mono space-y-2 text-left">
+            <div className="flex justify-between items-center text-slate-400">
+              <span>Attempted By:</span>
+              <span className="text-white font-bold">@{user?.username} ({user?.fullName || 'Officer'})</span>
+            </div>
+            <div className="flex justify-between items-center text-slate-400">
+              <span>Required Entitlement:</span>
+              <span className="text-amber-400 font-bold">CASE_READ</span>
+            </div>
+            <div className="flex justify-between items-center text-slate-400">
+              <span>RBAC Matrix Decision:</span>
+              <span className="text-rose-400 font-bold">DENIED (ENTITLEMENT REVOKED)</span>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* Scope Selector: All vs My Assigned vs Restricted (For Admin Supervision) */}
+          {isAdmin ? (
         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => setScopeFilter('ALL')}
@@ -583,6 +622,8 @@ export const CasesListPage = () => {
             itemLabel="dossiers"
           />
         </div>
+      )}
+      </>
       )}
 
       {/* Register Case Modal */}

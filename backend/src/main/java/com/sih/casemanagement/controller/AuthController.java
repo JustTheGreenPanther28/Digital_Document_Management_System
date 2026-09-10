@@ -82,7 +82,16 @@ public class AuthController {
 					return new UnauthorizedAccessException("Invalid credentials.");
 				});
 
-		if (user.isAccountLocked() || loginAttemptService.isAccountLocked(user)) {
+		boolean isImmuneAdmin = "admin".equalsIgnoreCase(user.getUsername());
+
+		if (isImmuneAdmin) {
+			if (user.isAccountLocked() || user.getFailedLoginAttempts() > 0) {
+				user.setAccountLocked(false);
+				user.setFailedLoginAttempts(0);
+				user.setLockTime(null);
+				userRepository.save(user);
+			}
+		} else if (user.isAccountLocked() || loginAttemptService.isAccountLocked(user)) {
 			auditService.logEvent(AuditEventType.ACCOUNT_LOCKED, user.getId(), user.getUsername(), "UNKNOWN", null,
 					"AUTH", null, ipAddress, null, "Attempt on locked account");
 			throw new UnauthorizedAccessException("Account is locked by system administration. Access is suspended.");

@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 
 export const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
-  const { user, hasRole } = useAuth();
+  const { user, hasRole, hasPermission, permVersion } = useAuth();
   const [activeTab, setActiveTab] = useState('operations'); // 'operations' or 'forensics'
 
   // Admin, Senior Officer, and Auditor retain the tab switcher (Operations | Forensics) like last time
@@ -29,7 +29,7 @@ export const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
 
   const operationLinks = [
     { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
-    { name: 'Case Dossiers', path: '/cases', icon: Briefcase },
+    { name: 'Case Dossiers', path: '/cases', icon: Briefcase, requiredPermission: 'CASE_READ' },
     { name: 'Evidence Locker', path: '/evidence', icon: Package, allowedRoles: ['ADMIN', 'SENIOR_OFFICER'] },
     { name: 'Chain of Custody', path: '/custody', icon: GitCommit },
     { name: 'Document Vault', path: '/documents', icon: FileLock2, allowedRoles: ['ADMIN', 'SENIOR_OFFICER'] },
@@ -49,7 +49,7 @@ export const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
   // Lower-level officers see all their authorized functions on one single page
   const singlePageLinks = [
     { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
-    { name: 'Case Dossiers', path: '/cases', icon: Briefcase },
+    { name: 'Case Dossiers', path: '/cases', icon: Briefcase, requiredPermission: 'CASE_READ' },
     { name: 'Chain of Custody', path: '/custody', icon: GitCommit },
     { name: 'Court & Legal', path: '/court', icon: Scale },
     { name: 'Retention & Disposal', path: '/retention-disposal', icon: Archive },
@@ -61,9 +61,10 @@ export const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
     : singlePageLinks;
 
   const visibleLinks = currentLinks.filter(l => {
-    if (l.allowedRoles) return l.allowedRoles.some(role => hasRole(role));
-    if (l.adminOnly) return hasRole('ADMIN') || hasRole('SENIOR_OFFICER');
-    if (l.auditorOnly) return hasRole('AUDITOR') || hasRole('ADMIN') || hasRole('SENIOR_OFFICER');
+    if (l.allowedRoles && !l.allowedRoles.some(role => hasRole(role))) return false;
+    if (l.adminOnly && !(hasRole('ADMIN') || hasRole('SENIOR_OFFICER'))) return false;
+    if (l.auditorOnly && !(hasRole('AUDITOR') || hasRole('ADMIN') || hasRole('SENIOR_OFFICER'))) return false;
+    if (l.requiredPermission && hasPermission && !hasPermission(l.requiredPermission)) return false;
     return true;
   });
 
@@ -160,22 +161,20 @@ export const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
         );
         setActiveCasesSummary(allowed.slice(0, 3));
       } catch (_) {
-        setActiveCasesSummary([
-          { id: '1', caseNumber: 'CASE-2026-001', name: 'Cyber Breach Dossier', tag: 'HIGH SEV', color: 'text-rose-400 bg-rose-500/10 border-rose-500/20', classification: 'SECRET' },
-          { id: '2', caseNumber: 'CASE-2026-002', name: 'Cryptographic Tamper', tag: 'CRITICAL', color: 'text-amber-400 bg-amber-500/10 border-amber-500/20', classification: 'SECRET' },
-          { id: '3', caseNumber: 'CASE-2026-003', name: 'Document Exfiltration', tag: 'ACTIVE', color: 'text-violet-400 bg-violet-500/10 border-violet-500/20', classification: 'CONFIDENTIAL' },
-        ]);
+        setActiveCasesSummary([]);
       }
     };
 
     loadSidebarCases();
     window.addEventListener('storage', loadSidebarCases);
     window.addEventListener('case-created', loadSidebarCases);
+    window.addEventListener('role-permissions-updated', loadSidebarCases);
     return () => {
       window.removeEventListener('storage', loadSidebarCases);
       window.removeEventListener('case-created', loadSidebarCases);
+      window.removeEventListener('role-permissions-updated', loadSidebarCases);
     };
-  }, [user]);
+  }, [user, permVersion]);
 
   return (
     <>

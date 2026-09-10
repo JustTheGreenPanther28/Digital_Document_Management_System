@@ -191,7 +191,7 @@ const safeGetArray = (key) => {
 };
 
 export const GlobalSearchPage = () => {
-  const { user } = useAuth();
+  const { user, permVersion } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [query, setQuery] = useState(searchParams.get('q') || '');
@@ -341,7 +341,7 @@ export const GlobalSearchPage = () => {
       transfers,
       totalMatches: cases.length + evidence.length + documents.length + transfers.length
     };
-  }, [allDataset, query, user?.clearance]);
+  }, [allDataset, query, user, permVersion]);
 
   const handleInputChange = (e) => {
     const val = e.target.value;

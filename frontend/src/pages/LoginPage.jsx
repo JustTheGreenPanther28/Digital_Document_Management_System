@@ -61,16 +61,25 @@ export const LoginPage = () => {
   // Hardware Biometric Key Simulation State
   const [biometricScanning, setBiometricScanning] = useState(false);
 
+  const [isAccountLocked, setIsAccountLocked] = useState(false);
+
   const handleStandardLogin = async (e) => {
     e?.preventDefault?.();
     setError('');
+    setIsAccountLocked(false);
     setLoading(true);
     try {
       await login(username, password);
       navigate('/dashboard', { replace: true });
       window.location.href = '/dashboard';
     } catch (err) {
-      setError(err.message || 'Authentication failed. Please verify your credentials.');
+      const msg = err.message || '';
+      if (msg.startsWith('ACCOUNT_LOCKED:') || err.code === 'ACCOUNT_LOCKED') {
+        setIsAccountLocked(true);
+        setError('');
+      } else {
+        setError(msg || 'Authentication failed. Please verify your credentials.');
+      }
     } finally {
       setLoading(false);
     }
@@ -250,7 +259,27 @@ export const LoginPage = () => {
                   </p>
                 </div>
 
-                {/* Error Banner */}
+                {/* Account Locked Banner */}
+                {isAccountLocked && (
+                  <div className="mb-5 p-4 rounded-2xl bg-amber-950/60 border border-amber-600/60 text-amber-200 text-xs animate-shake">
+                    <div className="flex items-start gap-3">
+                      <div className="w-8 h-8 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <Lock className="w-4 h-4 text-amber-400" />
+                      </div>
+                      <div className="space-y-1">
+                        <p className="font-bold text-amber-300 text-[13px] tracking-tight">Account Locked by Administrator</p>
+                        <p className="text-amber-200/80 leading-relaxed">
+                          Your account has been suspended by the system administrator. You are unable to access the platform at this time.
+                        </p>
+                        <p className="text-amber-400/70 font-mono text-[10px] mt-1">
+                          Contact your system administrator or senior officer to restore access.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Generic Error Banner */}
                 {error && (
                   <div className="mb-5 p-3.5 rounded-2xl bg-rose-950/60 border border-rose-800 text-rose-200 text-xs flex items-center gap-3 animate-shake">
                     <AlertCircle className="w-4 h-4 flex-shrink-0 text-rose-400" />

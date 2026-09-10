@@ -45,12 +45,41 @@ public class UserController {
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
+    @PostMapping("/bulk")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SENIOR_OFFICER') or hasAuthority('ADMIN_USER_PROVISION')")
+    public ResponseEntity<List<User>> bulkCreateUsers(@Valid @RequestBody List<CreateUserRequest> requests) {
+        List<User> createdUsers = new java.util.ArrayList<>();
+        for (CreateUserRequest request : requests) {
+            try {
+                User created = userService.createUser(
+                    request.username(),
+                    request.email(),
+                    request.password(),
+                    request.fullName(),
+                    request.badgeNumber(),
+                    request.department(),
+                    request.securityClearance(),
+                    request.roles()
+                );
+                createdUsers.add(created);
+            } catch (Exception ignored) {
+                // Keep processing remaining valid users in the batch
+            }
+        }
+        return ResponseEntity.status(HttpStatus.CREATED).body(createdUsers);
+    }
+
     @PatchMapping("/{id}/status")
     @PreAuthorize("hasAnyRole('ADMIN', 'SENIOR_OFFICER') or hasAuthority('ADMIN_USER_PROVISION')")
     public ResponseEntity<User> updateStatus(
         @PathVariable UUID id,
         @RequestBody Map<String, Boolean> body
     ) {
+        User target = userService.getUserById(id);
+        if ("admin".equalsIgnoreCase(target.getUsername())) {
+            // Root administrator is permanently protected and immune from locks
+            return ResponseEntity.ok(userService.setUserStatus(id, true, false));
+        }
         boolean enabled = body.getOrDefault("enabled", true);
         boolean locked = body.getOrDefault("locked", false);
         return ResponseEntity.ok(userService.setUserStatus(id, enabled, locked));

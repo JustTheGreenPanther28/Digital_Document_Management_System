@@ -28,7 +28,7 @@ import {
 } from 'lucide-react';
 
 export const Navbar = ({ onToggleMobileMenu = () => {}, isMobileMenuOpen = false }) => {
-  const { user, quickSwitch, logout, hasRole } = useAuth();
+  const { user, quickSwitch, logout, hasRole, hasPermission } = useAuth();
   const navigate = useNavigate();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -38,8 +38,8 @@ export const Navbar = ({ onToggleMobileMenu = () => {}, isMobileMenuOpen = false
   const searchContainerRef = useRef(null);
   const dropdownRef = useRef(null);
 
-  const canViewAlerts = hasRole && (hasRole('ADMIN') || hasRole('AUDITOR') || hasRole('SENIOR_OFFICER'));
-  const canCreateCase = hasRole && (hasRole('ADMIN') || hasRole('SENIOR_OFFICER') || hasRole('INVESTIGATOR'));
+  const canViewAlerts = hasPermission ? (hasPermission('AUDIT_VERIFY_LEDGER') || hasRole('ADMIN') || hasRole('AUDITOR') || hasRole('SENIOR_OFFICER')) : (hasRole('ADMIN') || hasRole('AUDITOR') || hasRole('SENIOR_OFFICER'));
+  const canCreateCase = hasPermission ? hasPermission('CASE_CREATE') : (hasRole('ADMIN') || hasRole('SENIOR_OFFICER') || hasRole('INVESTIGATOR'));
 
   // Global Ctrl+K / Cmd+K listener
   useEffect(() => {
@@ -116,7 +116,9 @@ export const Navbar = ({ onToggleMobileMenu = () => {}, isMobileMenuOpen = false
       ...customDocs
     ];
 
-    const matchedCases = baseCases
+    const canReadCase = hasPermission ? hasPermission('CASE_READ') : true;
+
+    const matchedCases = !canReadCase ? [] : baseCases
       .filter(c => c.caseNumber?.toLowerCase().includes(q) || c.title?.toLowerCase().includes(q) || c.firNumber?.toLowerCase().includes(q))
       .slice(0, 3)
       .map(c => ({ type: 'CASE', title: c.caseNumber, subtitle: c.title, link: `/cases/${c.id}` }));
