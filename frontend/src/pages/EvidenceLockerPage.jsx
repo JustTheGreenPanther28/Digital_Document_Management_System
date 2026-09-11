@@ -12,9 +12,7 @@ const CASE_CLASSIFICATIONS = {
   '2': 'SECRET',
   'CASE-2026-002': 'SECRET',
   '3': 'CONFIDENTIAL',
-  'CASE-2026-003': 'CONFIDENTIAL',
-  '4': 'PUBLIC',
-  'CASE-2026-004': 'PUBLIC'
+  'CASE-2026-003': 'CONFIDENTIAL'
 };
 
 const FALLBACK_EVIDENCE_ITEMS = [
@@ -65,18 +63,6 @@ const FALLBACK_EVIDENCE_ITEMS = [
     storageLocation: 'Vault 03 - Lockbox 12',
     status: 'IN_CUSTODY',
     currentCustodian: 'Dr. Evelyn Reed',
-  },
-  {
-    id: 'evd-5',
-    barcode: 'EVD-2026-004-A',
-    caseId: '4',
-    caseNumber: 'CASE-2026-004',
-    classification: 'PUBLIC',
-    itemCategory: 'DOCUMENTARY',
-    description: 'Certified Municipal Automated Transit Log Archive & Fare Receipts.',
-    storageLocation: 'Public Archives - Locker 08',
-    status: 'IN_CUSTODY',
-    currentCustodian: 'Registrar Arthur Pendelton',
   }
 ];
 

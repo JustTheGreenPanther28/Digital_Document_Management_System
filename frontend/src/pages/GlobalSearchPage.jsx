@@ -72,24 +72,6 @@ const FALLBACK_CASES = [
       { username: 'forensic_officer', fullName: 'Dr. Evelyn Reed', roleInCase: 'FORENSIC_EXPERT', clearance: 'SECRET' },
       { username: 'custodian', fullName: 'Officer Michael Vance', roleInCase: 'EVIDENCE_CUSTODIAN', clearance: 'CONFIDENTIAL' }
     ]
-  },
-  {
-    id: '4',
-    caseNumber: 'CASE-2026-004',
-    title: 'State vs Metro Automated Transit & Toll Registry Dispute',
-    description: 'Public judicial inquiry into transit ticketing anomaly and automated municipal toll violation hearings.',
-    firNumber: 'FIR-2026-0105',
-    investigatingAgency: 'Metropolitan Public Traffic & Court Division',
-    priority: 'LOW',
-    classification: 'PUBLIC',
-    status: 'HEARING_SCHEDULED',
-    registrationDate: '2026-08-22T08:00:00Z',
-    leadOfficer: 'Registrar Arthur Pendelton',
-    createdByUsername: 'court_officer',
-    teamAssignments: [
-      { username: 'court_officer', fullName: 'Registrar Arthur Pendelton', roleInCase: 'COURT_REGISTRAR', clearance: 'PUBLIC' },
-      { username: 'prosecutor', fullName: 'Counsel Diane Lockhart', roleInCase: 'PUBLIC_PROSECUTOR', clearance: 'SECRET' }
-    ]
   }
 ];
 
@@ -99,7 +81,7 @@ const FALLBACK_EVIDENCE = [
     barcode: 'EVD-2026-001-A',
     caseNumber: 'CASE-2026-001',
     itemCategory: 'DIGITAL_DEVICE',
-    description: 'Encrypted NVMe SSD containing exfiltrated server memory dumps and telemetry logs.',
+    description: 'Encrypted NVMe SSD containing exfiltrated server memory dumps.',
     storageLocation: 'Vault 01 - Compartment 4B',
     status: 'IN_CUSTODY',
     currentCustodian: 'Officer Michael Vance',
@@ -109,34 +91,23 @@ const FALLBACK_EVIDENCE = [
     id: 'evd-2',
     barcode: 'EVD-2026-001-B',
     caseNumber: 'CASE-2026-001',
-    itemCategory: 'HARDWARE_CONTROLLER',
-    description: 'Compromised SCADA Gateway hardware controller extracted from power station.',
+    itemCategory: 'DIGITAL_DEVICE',
+    description: 'Compromised SCADA Gateway hardware controller with malicious firmware.',
     storageLocation: 'Vault 01 - Shelf C',
     status: 'IN_FORENSIC_ANALYSIS',
     currentCustodian: 'Dr. Evelyn Reed',
-    classification: 'SECRET'
+    classification: 'TOP_SECRET'
   },
   {
     id: 'evd-3',
     barcode: 'EVD-2026-002-A',
     caseNumber: 'CASE-2026-002',
-    itemCategory: 'STORAGE_MEDIA',
-    description: 'SanDisk Extreme 1TB Flash Drive with private key transaction signatures.',
+    itemCategory: 'HARDWARE_KEY',
+    description: 'Hardware Security Module (HSM) USB token used in unauthorized fund transfers.',
     storageLocation: 'Vault 02 - Bin 9',
     status: 'IN_CUSTODY',
     currentCustodian: 'Officer Michael Vance',
     classification: 'SECRET'
-  },
-  {
-    id: 'evd-4',
-    barcode: 'EVD-2026-004-A',
-    caseNumber: 'CASE-2026-004',
-    itemCategory: 'DOCUMENTARY',
-    description: 'Public municipal transit ticket logs and automated toll registry printouts.',
-    storageLocation: 'Public Registry Vault - Shelf 1',
-    status: 'IN_CUSTODY',
-    currentCustodian: 'Registrar Arthur Pendelton',
-    classification: 'PUBLIC'
   }
 ];
 
@@ -160,16 +131,6 @@ const FALLBACK_DOCS = [
     originalFilename: 'fir_0981_signed.pdf',
     sha256Hash: '7c3ae941bca94812739481274918237491823749182374918237491823749182',
     uploadedAt: '2026-08-16T10:15:00Z'
-  },
-  {
-    id: 'doc-3',
-    title: 'Public Judicial Gazette & Seizure Proclamation',
-    caseNumber: 'CASE-2026-004',
-    documentType: 'POLICE_REPORT',
-    classification: 'PUBLIC',
-    originalFilename: 'public_judicial_proclamation.pdf',
-    sha256Hash: '5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8',
-    uploadedAt: '2026-08-22T09:30:00Z'
   }
 ];
 

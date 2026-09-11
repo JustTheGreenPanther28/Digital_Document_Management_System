@@ -79,23 +79,6 @@ const FALLBACK_CASES = [
       { username: 'forensic_officer', fullName: 'Dr. Evelyn Reed', roleInCase: 'FORENSIC_EXPERT', clearance: 'SECRET' },
       { username: 'custodian', fullName: 'Officer Michael Vance', roleInCase: 'EVIDENCE_CUSTODIAN', clearance: 'CONFIDENTIAL' }
     ]
-  },
-  {
-    id: '4',
-    caseNumber: 'CASE-2026-004',
-    title: 'State vs Metro Automated Transit & Toll Registry Dispute',
-    description: 'Public judicial inquiry into transit ticketing anomaly and automated municipal toll violation hearings.',
-    firNumber: 'FIR-2026-0105',
-    investigatingAgency: 'Metropolitan Public Traffic & Court Division',
-    priority: 'LOW',
-    classification: 'PUBLIC',
-    status: 'HEARING_SCHEDULED',
-    legalHold: false,
-    createdByUsername: 'court_officer',
-    teamAssignments: [
-      { username: 'court_officer', fullName: 'Registrar Arthur Pendelton', roleInCase: 'COURT_REGISTRAR', clearance: 'PUBLIC' },
-      { username: 'prosecutor', fullName: 'Counsel Diane Lockhart', roleInCase: 'PUBLIC_PROSECUTOR', clearance: 'SECRET' }
-    ]
   }
 ];
 

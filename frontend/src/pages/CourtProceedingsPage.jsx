@@ -34,14 +34,6 @@ const FALLBACK_CASES = [
     status: 'INVESTIGATION_ONGOING',
     classificationLevel: 'CONFIDENTIAL',
     description: 'State cyber security investigation tracking distributed ransomware nodes.'
-  },
-  {
-    id: 'case-004',
-    caseNumber: 'CASE-2026-004',
-    title: 'State vs Metro Automated Transit & Toll Registry Dispute',
-    status: 'HEARING_SCHEDULED',
-    classificationLevel: 'PUBLIC',
-    description: 'Public judicial inquiry and traffic infraction ledger dispute submitted for public sessions court hearing.'
   }
 ];
 

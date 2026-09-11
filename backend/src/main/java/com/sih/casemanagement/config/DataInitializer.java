@@ -319,25 +319,6 @@ public class DataInitializer implements CommandLineRunner {
                 if (custodian != null) assignmentRepository.save(new CaseUserAssignment(savedCase3, custodian, "EVIDENCE_CUSTODIAN", admin));
                 statusHistoryRepository.save(new CaseStatusHistory(savedCase3, null, CaseStatus.REGISTERED, admin, "Case Registered"));
 
-                // CASE-2026-004 (PUBLIC)
-                Case case4 = new Case();
-                case4.setCaseNumber("CASE-2026-004");
-                case4.setTitle("State vs Metro Automated Transit & Toll Registry Dispute");
-                case4.setDescription("Public judicial inquiry into transit ticketing anomaly and automated municipal toll violation hearings.");
-                case4.setFirNumber("FIR-2026-0105");
-                case4.setIncidentDate(Instant.now().minusSeconds(86400 * 10));
-                case4.setRegistrationDate(Instant.now().minusSeconds(86400 * 8));
-                case4.setInvestigatingAgency("Metropolitan Public Traffic & Court Division");
-                case4.setStatus(CaseStatus.COURT_PROCEEDINGS);
-                case4.setPriority(CasePriority.LOW);
-                case4.setClassification(DocumentClassification.PUBLIC);
-                case4.setCreatedBy(courtOfficer != null ? courtOfficer : admin);
-                Case savedCase4 = caseRepository.save(case4);
-                assignmentRepository.save(new CaseUserAssignment(savedCase4, admin, "SYSTEM_ADMINISTRATOR", admin));
-                if (courtOfficer != null) assignmentRepository.save(new CaseUserAssignment(savedCase4, courtOfficer, "COURT_REGISTRAR", admin));
-                if (prosecutor != null) assignmentRepository.save(new CaseUserAssignment(savedCase4, prosecutor, "PUBLIC_PROSECUTOR", admin));
-                statusHistoryRepository.save(new CaseStatusHistory(savedCase4, null, CaseStatus.COURT_PROCEEDINGS, admin, "Hearing Scheduled"));
-
                 auditService.logEvent(
                     AuditEventType.CASE_CREATED,
                     admin.getId(),
@@ -350,7 +331,7 @@ public class DataInitializer implements CommandLineRunner {
                     "System-Initializer",
                     "Investigation records initialized with ABAC assignment matrix"
                 );
-                log.info("Initialized baseline cases CASE-2026-001 through CASE-2026-004 with ABAC team assignments");
+                log.info("Initialized baseline cases CASE-2026-001 through CASE-2026-003 with ABAC team assignments");
             }
         }
     }

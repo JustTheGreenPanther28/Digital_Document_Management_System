@@ -118,19 +118,6 @@ export const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
               { username: 'custodian', fullName: 'Officer Michael Vance', roleInCase: 'EVIDENCE_CUSTODIAN', clearance: 'CONFIDENTIAL' }
             ]
           },
-          { 
-            id: '4', 
-            caseNumber: 'CASE-2026-004', 
-            name: 'Metro Transit & Toll', 
-            tag: 'PUBLIC', 
-            color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20', 
-            classification: 'PUBLIC',
-            createdByUsername: 'court_officer',
-            teamAssignments: [
-              { username: 'court_officer', fullName: 'Registrar Arthur Pendelton', roleInCase: 'COURT_REGISTRAR', clearance: 'PUBLIC' },
-              { username: 'prosecutor', fullName: 'Counsel Diane Lockhart', roleInCase: 'PUBLIC_PROSECUTOR', clearance: 'SECRET' }
-            ]
-          },
         ];
 
         const formattedCustom = customCases.map((c) => ({

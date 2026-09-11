@@ -289,8 +289,7 @@ export const CustodyTransferPage = () => {
       const fallbackList = [
         { id: 'ev-001', evidenceNumber: 'EVD-2026-001-A', title: 'Samsung 980 Pro NVMe SSD 1TB', caseNumber: 'CASE-2026-001' },
         { id: 'ev-002', evidenceNumber: 'EVD-2026-002-C', title: 'Apple iPhone 15 Pro (Hardware Encrypted)', caseNumber: 'CASE-2026-002' },
-        { id: 'ev-003', evidenceNumber: 'EVD-2026-003-B', title: 'SanDisk Ultra 128GB Flash Drive', caseNumber: 'CASE-2026-003' },
-        { id: 'ev-004', evidenceNumber: 'EVD-2026-004-D', title: 'DJI Mavic 3 Enterprise Drone Flight Controller', caseNumber: 'CASE-2026-004' },
+        { id: 'ev-003', evidenceNumber: 'EVD-2026-003-B', title: 'SanDisk Ultra 128GB Flash Drive', caseNumber: 'CASE-2026-003' }
       ];
 
       if (evList.length === 0) {

@@ -57,14 +57,6 @@ export const DEFAULT_CASE_ASSIGNMENTS = {
   'CASE-2026-003': [
     { username: 'forensic_officer', fullName: 'Dr. Evelyn Reed', roleInCase: 'FORENSIC_EXPERT', clearance: 'SECRET' },
     { username: 'custodian', fullName: 'Officer Michael Vance', roleInCase: 'EVIDENCE_CUSTODIAN', clearance: 'CONFIDENTIAL' }
-  ],
-  '4': [
-    { username: 'court_officer', fullName: 'Registrar Arthur Pendelton', roleInCase: 'COURT_REGISTRAR', clearance: 'PUBLIC' },
-    { username: 'prosecutor', fullName: 'Counsel Diane Lockhart', roleInCase: 'PUBLIC_PROSECUTOR', clearance: 'SECRET' }
-  ],
-  'CASE-2026-004': [
-    { username: 'court_officer', fullName: 'Registrar Arthur Pendelton', roleInCase: 'COURT_REGISTRAR', clearance: 'PUBLIC' },
-    { username: 'prosecutor', fullName: 'Counsel Diane Lockhart', roleInCase: 'PUBLIC_PROSECUTOR', clearance: 'SECRET' }
   ]
 };
 
@@ -74,9 +66,7 @@ export const DEFAULT_CASE_CREATORS = {
   '2': 'senior_officer',
   'CASE-2026-002': 'senior_officer',
   '3': 'senior_officer',
-  'CASE-2026-003': 'senior_officer',
-  '4': 'court_officer',
-  'CASE-2026-004': 'court_officer'
+  'CASE-2026-003': 'senior_officer'
 };
 
 import { checkUserPermission } from './rbacService';

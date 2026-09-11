@@ -57,19 +57,6 @@ const FALLBACK_VAULT_DOCS = [
     sha256Hash: '3f5481a89cde8712398412397129381723981273981729381729381729381273', 
     locked: true, 
     uploadedAt: '2026-08-18T16:00:00Z' 
-  },
-  { 
-    id: 'doc-104', 
-    caseId: '4', 
-    caseNumber: 'CASE-2026-004', 
-    title: 'Public Judicial Gazette & Seizure Proclamation', 
-    documentType: 'POLICE_REPORT', 
-    classification: 'PUBLIC', 
-    originalFilename: 'public_judicial_proclamation.pdf', 
-    fileSize: 312450, 
-    sha256Hash: '5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8', 
-    locked: false, 
-    uploadedAt: '2026-08-22T09:30:00Z' 
   }
 ];
 
