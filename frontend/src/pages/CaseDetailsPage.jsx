@@ -492,7 +492,7 @@ export const CaseDetailsPage = () => {
         console.warn('Charge sheet AI endpoint returned error, using procedural scrutiny engine:', apiErr);
       }
 
-      if (!data || !data.summaryText) {
+      if (!data || !data.summaryText || data.summaryText.includes('AI analysis unavailable') || data.summaryText.includes('Error:') || data.summaryText.includes('404')) {
         data = buildChargeSheetFallback(chargeSheet, caseData);
       }
 

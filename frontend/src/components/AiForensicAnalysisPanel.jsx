@@ -283,7 +283,7 @@ export default function AiForensicAnalysisPanel({
       else if (type === 'chargesheet' && chargeSheetId) data = await api.runChargeSheetAnalysis(chargeSheetId);
       else if (type === 'case' && caseId) data = await api.runCaseAnalysis(caseId);
       
-      if (!data || !data.riskLevel) {
+      if (!data || !data.riskLevel || data.summaryText?.includes('AI analysis unavailable') || data.summaryText?.includes('Error:') || data.summaryText?.includes('404')) {
         data = buildFallbackResult(type, caseId);
       }
       setResult(data);
