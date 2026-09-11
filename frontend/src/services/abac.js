@@ -31,6 +31,54 @@ export const getStoredTeamAssignments = () => {
   }
 };
 
+export const DEFAULT_CASE_ASSIGNMENTS = {
+  '1': [
+    { username: 'investigator_a', fullName: 'Det. John Miller', roleInCase: 'LEAD_INVESTIGATOR', clearance: 'SECRET' },
+    { username: 'forensic_officer', fullName: 'Dr. Evelyn Reed', roleInCase: 'FORENSIC_EXPERT', clearance: 'SECRET' },
+    { username: 'custodian', fullName: 'Officer Michael Vance', roleInCase: 'EVIDENCE_CUSTODIAN', clearance: 'CONFIDENTIAL' }
+  ],
+  'CASE-2026-001': [
+    { username: 'investigator_a', fullName: 'Det. John Miller', roleInCase: 'LEAD_INVESTIGATOR', clearance: 'SECRET' },
+    { username: 'forensic_officer', fullName: 'Dr. Evelyn Reed', roleInCase: 'FORENSIC_EXPERT', clearance: 'SECRET' },
+    { username: 'custodian', fullName: 'Officer Michael Vance', roleInCase: 'EVIDENCE_CUSTODIAN', clearance: 'CONFIDENTIAL' }
+  ],
+  '2': [
+    { username: 'investigator_a', fullName: 'Det. John Miller', roleInCase: 'LEAD_INVESTIGATOR', clearance: 'SECRET' },
+    { username: 'prosecutor', fullName: 'Counsel Diane Lockhart', roleInCase: 'LEAD_PROSECUTOR', clearance: 'SECRET' }
+  ],
+  'CASE-2026-002': [
+    { username: 'investigator_a', fullName: 'Det. John Miller', roleInCase: 'LEAD_INVESTIGATOR', clearance: 'SECRET' },
+    { username: 'prosecutor', fullName: 'Counsel Diane Lockhart', roleInCase: 'LEAD_PROSECUTOR', clearance: 'SECRET' }
+  ],
+  '3': [
+    { username: 'forensic_officer', fullName: 'Dr. Evelyn Reed', roleInCase: 'FORENSIC_EXPERT', clearance: 'SECRET' },
+    { username: 'custodian', fullName: 'Officer Michael Vance', roleInCase: 'EVIDENCE_CUSTODIAN', clearance: 'CONFIDENTIAL' }
+  ],
+  'CASE-2026-003': [
+    { username: 'forensic_officer', fullName: 'Dr. Evelyn Reed', roleInCase: 'FORENSIC_EXPERT', clearance: 'SECRET' },
+    { username: 'custodian', fullName: 'Officer Michael Vance', roleInCase: 'EVIDENCE_CUSTODIAN', clearance: 'CONFIDENTIAL' }
+  ],
+  '4': [
+    { username: 'court_officer', fullName: 'Registrar Arthur Pendelton', roleInCase: 'COURT_REGISTRAR', clearance: 'PUBLIC' },
+    { username: 'prosecutor', fullName: 'Counsel Diane Lockhart', roleInCase: 'PUBLIC_PROSECUTOR', clearance: 'SECRET' }
+  ],
+  'CASE-2026-004': [
+    { username: 'court_officer', fullName: 'Registrar Arthur Pendelton', roleInCase: 'COURT_REGISTRAR', clearance: 'PUBLIC' },
+    { username: 'prosecutor', fullName: 'Counsel Diane Lockhart', roleInCase: 'PUBLIC_PROSECUTOR', clearance: 'SECRET' }
+  ]
+};
+
+export const DEFAULT_CASE_CREATORS = {
+  '1': 'senior_officer',
+  'CASE-2026-001': 'senior_officer',
+  '2': 'senior_officer',
+  'CASE-2026-002': 'senior_officer',
+  '3': 'senior_officer',
+  'CASE-2026-003': 'senior_officer',
+  '4': 'court_officer',
+  'CASE-2026-004': 'court_officer'
+};
+
 import { checkUserPermission } from './rbacService';
 
 export const checkCaseAccess = (user, caseData, runtimeAssignments = []) => {
@@ -51,8 +99,13 @@ export const checkCaseAccess = (user, caseData, runtimeAssignments = []) => {
     };
   }
 
-  const roles = user.roles || [];
-  const isAdmin = roles.some((r) => r === 'ADMIN' || r === 'ROLE_ADMIN') || user.username?.toLowerCase() === 'admin';
+  const userRoles = Array.isArray(user.roles) 
+    ? user.roles 
+    : (user.role ? [user.role] : []);
+  const normalizedRoles = userRoles.map(r => (typeof r === 'string' ? r : r?.name || '').replace(/^ROLE_/, '').toUpperCase());
+  const isAdmin = normalizedRoles.includes('ADMIN') || user.username?.toLowerCase() === 'admin';
+  const isSeniorOfficer = normalizedRoles.includes('SENIOR_OFFICER') || user.username?.toLowerCase() === 'senior_officer';
+  const isAuditor = normalizedRoles.includes('AUDITOR') || user.username?.toLowerCase() === 'auditor';
 
   const caseClassification = caseData?.classification || 'RESTRICTED';
 
@@ -67,17 +120,32 @@ export const checkCaseAccess = (user, caseData, runtimeAssignments = []) => {
     };
   }
 
-  // 2. Root System Administrator (ADMIN) maintains supervisory access only if CASE_READ is granted
+  // 2. Supervisory Oversight Authority (ADMIN & SENIOR_OFFICER maintain supervisory access across cases)
   if (isAdmin) {
     return { allowed: true, role: 'ADMIN', badge: 'SUPERVISORY ADMIN' };
+  }
+  if (isSeniorOfficer) {
+    return { allowed: true, role: 'SENIOR_OFFICER', badge: 'SENIOR OFFICER' };
+  }
+  if (isAuditor) {
+    return { allowed: true, role: 'AUDITOR', badge: 'AUDIT OVERSIGHT' };
   }
 
   const curUsername = (user.username || '').toLowerCase().trim();
   const curUserId = String(user.id || user.userId || '').toLowerCase().trim();
   const curFullName = (user.fullName || '').toLowerCase().trim();
 
+  const caseIdStr = String(caseData?.id || '');
+  const caseNumStr = String(caseData?.caseNumber || '');
+
   // 3. Creator of the Case Dossier
-  const creatorUsername = (caseData?.createdByUsername || caseData?.createdBy?.username || '').toLowerCase().trim();
+  const creatorUsername = (
+    caseData?.createdByUsername || 
+    caseData?.createdBy?.username || 
+    DEFAULT_CASE_CREATORS[caseNumStr] || 
+    DEFAULT_CASE_CREATORS[caseIdStr] || 
+    ''
+  ).toLowerCase().trim();
   const creatorId = String(caseData?.createdById || caseData?.createdBy?.id || '').toLowerCase().trim();
 
   if (
@@ -89,13 +157,13 @@ export const checkCaseAccess = (user, caseData, runtimeAssignments = []) => {
 
   // 4. Strict Person-Level Assignment Check
   const storedAssignments = getStoredTeamAssignments();
-  const caseIdStr = String(caseData?.id || '');
-  const caseNumStr = String(caseData?.caseNumber || '');
+  const defaultAsgns = DEFAULT_CASE_ASSIGNMENTS[caseNumStr] || DEFAULT_CASE_ASSIGNMENTS[caseIdStr] || [];
 
   const allAssignments = [
     ...(caseData?.assignments || []),
     ...(caseData?.teamAssignments || []),
     ...(runtimeAssignments || []),
+    ...defaultAsgns,
     ...storedAssignments.filter(
       (a) =>
         String(a.caseId) === caseIdStr ||

@@ -1080,7 +1080,12 @@ END OF OFFICIAL SECTION 173 CrPC / BNSS JUDICIAL CHARGE SHEET DOSSIER
       // 4. If standard demo case ID
       const fallbackCase = [FALLBACK_CASE_DETAILS, ...FALLBACK_CASES].find(
         c => String(c.id) === String(caseId) || c.caseNumber === caseId
-      ) || FALLBACK_CASE_DETAILS;
+      );
+
+      if (!fallbackCase) {
+        setError(`Case dossier ref [${caseId}] not found in judicial cryptographic registry.`);
+        return;
+      }
 
       const storedAsgns = getStoredAbacAssignments().filter(
         a => String(a.caseId) === String(fallbackCase.id) || 
@@ -1372,6 +1377,7 @@ END OF OFFICIAL SECTION 173 CrPC / BNSS JUDICIAL CHARGE SHEET DOSSIER
       const newAssignment = {
         id: `asgn-${Date.now()}`,
         caseId: caseId,
+        caseNumber: caseData?.caseNumber || (caseId === '1' ? 'CASE-2026-001' : caseId),
         userId: officerUid,
         username: officerUid,
         fullName: officerFullName,

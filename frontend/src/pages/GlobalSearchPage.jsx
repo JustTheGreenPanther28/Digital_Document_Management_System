@@ -29,7 +29,13 @@ const FALLBACK_CASES = [
     classification: 'SECRET',
     status: 'UNDER_INVESTIGATION',
     registrationDate: '2026-08-16T10:00:00Z',
-    leadOfficer: 'Officer Michael Vance'
+    leadOfficer: 'Officer Michael Vance',
+    createdByUsername: 'senior_officer',
+    teamAssignments: [
+      { username: 'investigator_a', fullName: 'Det. John Miller', roleInCase: 'LEAD_INVESTIGATOR', clearance: 'SECRET' },
+      { username: 'forensic_officer', fullName: 'Dr. Evelyn Reed', roleInCase: 'FORENSIC_EXPERT', clearance: 'SECRET' },
+      { username: 'custodian', fullName: 'Officer Michael Vance', roleInCase: 'EVIDENCE_CUSTODIAN', clearance: 'CONFIDENTIAL' }
+    ]
   },
   {
     id: '2',
@@ -42,7 +48,12 @@ const FALLBACK_CASES = [
     classification: 'SECRET',
     status: 'CHARGESHEET_FILED',
     registrationDate: '2026-08-18T14:30:00Z',
-    leadOfficer: 'Officer Michael Vance'
+    leadOfficer: 'Officer Michael Vance',
+    createdByUsername: 'senior_officer',
+    teamAssignments: [
+      { username: 'investigator_a', fullName: 'Det. John Miller', roleInCase: 'LEAD_INVESTIGATOR', clearance: 'SECRET' },
+      { username: 'prosecutor', fullName: 'Counsel Diane Lockhart', roleInCase: 'LEAD_PROSECUTOR', clearance: 'SECRET' }
+    ]
   },
   {
     id: '3',
@@ -55,7 +66,12 @@ const FALLBACK_CASES = [
     classification: 'CONFIDENTIAL',
     status: 'REGISTERED',
     registrationDate: '2026-08-20T09:00:00Z',
-    leadOfficer: 'Dr. Evelyn Reed'
+    leadOfficer: 'Dr. Evelyn Reed',
+    createdByUsername: 'senior_officer',
+    teamAssignments: [
+      { username: 'forensic_officer', fullName: 'Dr. Evelyn Reed', roleInCase: 'FORENSIC_EXPERT', clearance: 'SECRET' },
+      { username: 'custodian', fullName: 'Officer Michael Vance', roleInCase: 'EVIDENCE_CUSTODIAN', clearance: 'CONFIDENTIAL' }
+    ]
   },
   {
     id: '4',
@@ -68,7 +84,12 @@ const FALLBACK_CASES = [
     classification: 'PUBLIC',
     status: 'HEARING_SCHEDULED',
     registrationDate: '2026-08-22T08:00:00Z',
-    leadOfficer: 'Registrar Arthur Pendelton'
+    leadOfficer: 'Registrar Arthur Pendelton',
+    createdByUsername: 'court_officer',
+    teamAssignments: [
+      { username: 'court_officer', fullName: 'Registrar Arthur Pendelton', roleInCase: 'COURT_REGISTRAR', clearance: 'PUBLIC' },
+      { username: 'prosecutor', fullName: 'Counsel Diane Lockhart', roleInCase: 'PUBLIC_PROSECUTOR', clearance: 'SECRET' }
+    ]
   }
 ];
 
@@ -191,43 +212,45 @@ const safeGetArray = (key) => {
 };
 
 export const GlobalSearchPage = () => {
-  const { user, permVersion } = useAuth();
+  const { user, hasRole, permVersion } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [query, setQuery] = useState(searchParams.get('q') || '');
   const [domainFilter, setDomainFilter] = useState('ALL');
 
-  // Sync state if URL search params change
+  const isSupervisor = hasRole ? (hasRole('ADMIN') || hasRole('SENIOR_OFFICER')) : false;
+
+  // Sync state if URL query param changes
   useEffect(() => {
-    const urlQ = searchParams.get('q') ?? '';
-    if (urlQ !== query) {
-      setQuery(urlQ);
+    const qParam = searchParams.get('q');
+    if (qParam !== null && qParam !== query) {
+      setQuery(qParam);
     }
   }, [searchParams]);
 
-  // Load all local + fallback records safely
+  // Aggregate unified searchable corpus across cases, evidence, documents, and transfers
   const allDataset = useMemo(() => {
-    // 1. Cases
+    // 1. Cases: fallback + registered
     const customCases = safeGetArray('sih_registered_cases');
     const caseMap = new Map();
     [...FALLBACK_CASES, ...customCases].forEach(c => {
       if (c && (c.id || c.caseNumber)) {
-        caseMap.set(String(c.id || c.caseNumber), c);
+        caseMap.set(String(c.caseNumber || c.id), c);
       }
     });
     const mergedCases = Array.from(caseMap.values());
 
-    // 2. Evidence
+    // 2. Evidence: fallback + registered
     const customEvidence = safeGetArray('sih_registered_evidence');
     const evMap = new Map();
     [...FALLBACK_EVIDENCE, ...customEvidence].forEach(e => {
-      if (e && (e.id || e.barcode)) {
-        evMap.set(String(e.id || e.barcode), e);
+      if (e && (e.id || e.barcode || e.evidenceNumber)) {
+        evMap.set(String(e.barcode || e.evidenceNumber || e.id), e);
       }
     });
     const mergedEvidence = Array.from(evMap.values());
 
-    // 3. Documents
+    // 3. Documents: fallback + vault docs
     const customDocs = safeGetArray('sih_vault_documents');
     const docMap = new Map();
     [...FALLBACK_DOCS, ...customDocs].forEach(d => {
@@ -261,10 +284,23 @@ export const GlobalSearchPage = () => {
 
     // Map case numbers to classifications for cross-entity MAC clearance enforcement
     const caseClassificationMap = {};
+    const caseRefMap = {};
     (allDataset.cases || []).forEach(c => {
-      if (c.caseNumber) caseClassificationMap[c.caseNumber] = c.classification;
-      if (c.id) caseClassificationMap[String(c.id)] = c.classification;
+      if (c.caseNumber) {
+        caseClassificationMap[c.caseNumber] = c.classification;
+        caseRefMap[c.caseNumber] = c;
+      }
+      if (c.id) {
+        caseClassificationMap[String(c.id)] = c.classification;
+        caseRefMap[String(c.id)] = c;
+      }
     });
+
+    const canUserAccessCaseRef = (caseRef) => {
+      if (!caseRef) return false;
+      const parentCase = caseRefMap[caseRef] || { id: caseRef, caseNumber: caseRef };
+      return checkCaseAccess(user, parentCase).allowed;
+    };
 
     // Matching Cases (Person-Based ABAC: user must have clearance AND assignment/creator/admin access)
     const cases = (allDataset.cases || []).filter(c => {
@@ -284,9 +320,11 @@ export const GlobalSearchPage = () => {
       );
     });
 
-    // Matching Evidence (Person-Based ABAC: clearance + submitted/held by user unless admin)
+    // Matching Evidence (Person-Based ABAC: clearance + parent case access + submitted/held by user unless admin)
     const evidence = (allDataset.evidence || []).filter(e => {
       if (!e) return false;
+      const caseRef = e.caseNumber || (e.caseId ? String(e.caseId) : '');
+      if (!isSupervisor && caseRef && !canUserAccessCaseRef(caseRef)) return false;
       const itemClassification = e.classification || caseClassificationMap[e.caseNumber] || caseClassificationMap[String(e.caseId)] || 'RESTRICTED';
       if (!canClearanceAccess(user?.clearance, itemClassification)) return false;
       if (!isEvidenceSubmittedByUser(e, user)) return false;
@@ -302,9 +340,11 @@ export const GlobalSearchPage = () => {
       );
     });
 
-    // Matching Documents (Mandatory Access Control: hide documents exceeding user clearance)
+    // Matching Documents (Mandatory Access Control: hide documents exceeding user clearance or unassigned case)
     const documents = (allDataset.documents || []).filter(d => {
       if (!d) return false;
+      const caseRef = d.caseNumber || (d.caseId ? String(d.caseId) : '');
+      if (!isSupervisor && caseRef && !canUserAccessCaseRef(caseRef)) return false;
       const docClassification = d.classification || caseClassificationMap[d.caseNumber] || caseClassificationMap[String(d.caseId)] || 'RESTRICTED';
       if (!canClearanceAccess(user?.clearance, docClassification)) return false;
       if (!qLower) return true;
@@ -317,9 +357,11 @@ export const GlobalSearchPage = () => {
       );
     });
 
-    // Matching Custody Transfers (Mandatory Access Control: hide transfers for cases exceeding user clearance)
+    // Matching Custody Transfers (Mandatory Access Control: hide transfers for cases exceeding user clearance or unassigned case)
     const transfers = (allDataset.transfers || []).filter(t => {
       if (!t) return false;
+      const caseRef = t.caseNumber || (t.caseId ? String(t.caseId) : '');
+      if (!isSupervisor && caseRef && !canUserAccessCaseRef(caseRef)) return false;
       const transferClassification = caseClassificationMap[t.caseNumber] || 'RESTRICTED';
       if (!canClearanceAccess(user?.clearance, transferClassification)) return false;
       if (!qLower) return true;

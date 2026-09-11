@@ -254,36 +254,103 @@ public class DataInitializer implements CommandLineRunner {
             User admin = userRepository.findByUsername(effectiveAdminUser).orElse(null);
 
             if (admin != null) {
+                User invA = userRepository.findByUsername("investigator_a").orElse(null);
+                User forensic = userRepository.findByUsername("forensic_officer").orElse(null);
+                User custodian = userRepository.findByUsername("custodian").orElse(null);
+                User prosecutor = userRepository.findByUsername("prosecutor").orElse(null);
+                User courtOfficer = userRepository.findByUsername("court_officer").orElse(null);
+
+                // CASE-2026-001 (SECRET)
                 Case demoCase = new Case();
                 demoCase.setCaseNumber("CASE-2026-001");
-                demoCase.setTitle("National Cyber Security Briefing & Incident Registry");
-                demoCase.setDescription("Central secure digital repository and case registry initialized under zero-trust governance.");
-                demoCase.setFirNumber("FIR-2026-HQ-0001");
+                demoCase.setTitle("State vs Syndicate Alpha (Cyber Breach & Exfiltration)");
+                demoCase.setDescription("High-profile cyber espionage targeting power grid SCADA telemetry servers with zero-day exploits.");
+                demoCase.setFirNumber("FIR-2026-0981");
                 demoCase.setIncidentDate(Instant.now().minusSeconds(86400 * 2));
                 demoCase.setRegistrationDate(Instant.now().minusSeconds(86400));
-                demoCase.setInvestigatingAgency("National Cyber Defense Command");
-                demoCase.setStatus(CaseStatus.REGISTERED);
+                demoCase.setInvestigatingAgency("Central Crime Branch (CCB)");
+                demoCase.setStatus(CaseStatus.INVESTIGATION_ONGOING);
                 demoCase.setPriority(CasePriority.CRITICAL);
-                demoCase.setClassification(DocumentClassification.TOP_SECRET);
+                demoCase.setClassification(DocumentClassification.SECRET);
                 demoCase.setCreatedBy(admin);
 
-                Case savedCase = caseRepository.save(demoCase);
-                assignmentRepository.save(new CaseUserAssignment(savedCase, admin, "SYSTEM_ADMINISTRATOR", admin));
-                statusHistoryRepository.save(new CaseStatusHistory(savedCase, null, CaseStatus.REGISTERED, admin, "Genesis Case Initialized"));
+                Case savedCase1 = caseRepository.save(demoCase);
+                assignmentRepository.save(new CaseUserAssignment(savedCase1, admin, "SYSTEM_ADMINISTRATOR", admin));
+                if (invA != null) assignmentRepository.save(new CaseUserAssignment(savedCase1, invA, "LEAD_INVESTIGATOR", admin));
+                if (forensic != null) assignmentRepository.save(new CaseUserAssignment(savedCase1, forensic, "FORENSIC_EXPERT", admin));
+                if (custodian != null) assignmentRepository.save(new CaseUserAssignment(savedCase1, custodian, "EVIDENCE_CUSTODIAN", admin));
+                statusHistoryRepository.save(new CaseStatusHistory(savedCase1, null, CaseStatus.INVESTIGATION_ONGOING, admin, "Genesis Case Initialized"));
+
+                // CASE-2026-002 (SECRET)
+                Case case2 = new Case();
+                case2.setCaseNumber("CASE-2026-002");
+                case2.setTitle("Financial Securities Manipulation & Ledger Tamper");
+                case2.setDescription("Cryptographic fraud investigation involving unauthorized off-chain asset liquidation and forged signatures.");
+                case2.setFirNumber("FIR-2026-1142");
+                case2.setIncidentDate(Instant.now().minusSeconds(86400 * 4));
+                case2.setRegistrationDate(Instant.now().minusSeconds(86400 * 3));
+                case2.setInvestigatingAgency("Economic Offenses Wing (EOW)");
+                case2.setStatus(CaseStatus.UNDER_REVIEW);
+                case2.setPriority(CasePriority.HIGH);
+                case2.setClassification(DocumentClassification.SECRET);
+                case2.setCreatedBy(admin);
+                Case savedCase2 = caseRepository.save(case2);
+                assignmentRepository.save(new CaseUserAssignment(savedCase2, admin, "SYSTEM_ADMINISTRATOR", admin));
+                if (invA != null) assignmentRepository.save(new CaseUserAssignment(savedCase2, invA, "LEAD_INVESTIGATOR", admin));
+                if (prosecutor != null) assignmentRepository.save(new CaseUserAssignment(savedCase2, prosecutor, "LEAD_PROSECUTOR", admin));
+                statusHistoryRepository.save(new CaseStatusHistory(savedCase2, null, CaseStatus.UNDER_REVIEW, admin, "Chargesheet Filed"));
+
+                // CASE-2026-003 (CONFIDENTIAL)
+                Case case3 = new Case();
+                case3.setCaseNumber("CASE-2026-003");
+                case3.setTitle("Confidential Document Exfiltration & Trade Secrets");
+                case3.setDescription("Internal breach of classified engineering blueprints and unauthorized physical media duplication.");
+                case3.setFirNumber("FIR-2026-0428");
+                case3.setIncidentDate(Instant.now().minusSeconds(86400 * 6));
+                case3.setRegistrationDate(Instant.now().minusSeconds(86400 * 5));
+                case3.setInvestigatingAgency("Cyber Forensics Division (CFD)");
+                case3.setStatus(CaseStatus.REGISTERED);
+                case3.setPriority(CasePriority.MEDIUM);
+                case3.setClassification(DocumentClassification.CONFIDENTIAL);
+                case3.setCreatedBy(admin);
+                Case savedCase3 = caseRepository.save(case3);
+                assignmentRepository.save(new CaseUserAssignment(savedCase3, admin, "SYSTEM_ADMINISTRATOR", admin));
+                if (forensic != null) assignmentRepository.save(new CaseUserAssignment(savedCase3, forensic, "FORENSIC_EXPERT", admin));
+                if (custodian != null) assignmentRepository.save(new CaseUserAssignment(savedCase3, custodian, "EVIDENCE_CUSTODIAN", admin));
+                statusHistoryRepository.save(new CaseStatusHistory(savedCase3, null, CaseStatus.REGISTERED, admin, "Case Registered"));
+
+                // CASE-2026-004 (PUBLIC)
+                Case case4 = new Case();
+                case4.setCaseNumber("CASE-2026-004");
+                case4.setTitle("State vs Metro Automated Transit & Toll Registry Dispute");
+                case4.setDescription("Public judicial inquiry into transit ticketing anomaly and automated municipal toll violation hearings.");
+                case4.setFirNumber("FIR-2026-0105");
+                case4.setIncidentDate(Instant.now().minusSeconds(86400 * 10));
+                case4.setRegistrationDate(Instant.now().minusSeconds(86400 * 8));
+                case4.setInvestigatingAgency("Metropolitan Public Traffic & Court Division");
+                case4.setStatus(CaseStatus.COURT_PROCEEDINGS);
+                case4.setPriority(CasePriority.LOW);
+                case4.setClassification(DocumentClassification.PUBLIC);
+                case4.setCreatedBy(courtOfficer != null ? courtOfficer : admin);
+                Case savedCase4 = caseRepository.save(case4);
+                assignmentRepository.save(new CaseUserAssignment(savedCase4, admin, "SYSTEM_ADMINISTRATOR", admin));
+                if (courtOfficer != null) assignmentRepository.save(new CaseUserAssignment(savedCase4, courtOfficer, "COURT_REGISTRAR", admin));
+                if (prosecutor != null) assignmentRepository.save(new CaseUserAssignment(savedCase4, prosecutor, "PUBLIC_PROSECUTOR", admin));
+                statusHistoryRepository.save(new CaseStatusHistory(savedCase4, null, CaseStatus.COURT_PROCEEDINGS, admin, "Hearing Scheduled"));
 
                 auditService.logEvent(
                     AuditEventType.CASE_CREATED,
                     admin.getId(),
                     admin.getUsername(),
                     "ADMIN",
-                    savedCase.getId(),
+                    savedCase1.getId(),
                     "CASE",
-                    savedCase.getCaseNumber(),
+                    savedCase1.getCaseNumber(),
                     "127.0.0.1",
                     "System-Initializer",
-                    "Genesis investigation record initialized for " + savedCase.getCaseNumber()
+                    "Investigation records initialized with ABAC assignment matrix"
                 );
-                log.info("Initialized baseline case CASE-2026-001 for Administrator {}", effectiveAdminUser);
+                log.info("Initialized baseline cases CASE-2026-001 through CASE-2026-004 with ABAC team assignments");
             }
         }
     }

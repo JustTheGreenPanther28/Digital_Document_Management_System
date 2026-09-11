@@ -55,7 +55,13 @@ const FALLBACK_CASES = [
     registrationDate: new Date(Date.now() - 2 * 3600 * 1000).toISOString(),
     payloadSize: '31.39686',
     payloadUnit: 'GB',
-    leadOfficer: 'Inspector Naresh Sharma'
+    leadOfficer: 'Inspector Naresh Sharma',
+    createdByUsername: 'senior_officer',
+    teamAssignments: [
+      { username: 'investigator_a', fullName: 'Det. John Miller', roleInCase: 'LEAD_INVESTIGATOR', clearance: 'SECRET' },
+      { username: 'forensic_officer', fullName: 'Dr. Evelyn Reed', roleInCase: 'FORENSIC_EXPERT', clearance: 'SECRET' },
+      { username: 'custodian', fullName: 'Officer Michael Vance', roleInCase: 'EVIDENCE_CUSTODIAN', clearance: 'CONFIDENTIAL' }
+    ]
   },
   {
     id: '2',
@@ -70,7 +76,12 @@ const FALLBACK_CASES = [
     registrationDate: new Date(Date.now() - 36 * 3600 * 1000).toISOString(),
     payloadSize: '18.42012',
     payloadUnit: 'GB',
-    leadOfficer: 'Det. John Miller'
+    leadOfficer: 'Det. John Miller',
+    createdByUsername: 'senior_officer',
+    teamAssignments: [
+      { username: 'investigator_a', fullName: 'Det. John Miller', roleInCase: 'LEAD_INVESTIGATOR', clearance: 'SECRET' },
+      { username: 'prosecutor', fullName: 'Counsel Diane Lockhart', roleInCase: 'LEAD_PROSECUTOR', clearance: 'SECRET' }
+    ]
   },
   {
     id: '3',
@@ -85,7 +96,12 @@ const FALLBACK_CASES = [
     registrationDate: new Date(Date.now() - 5 * 24 * 3600 * 1000).toISOString(),
     payloadSize: '8.11450',
     payloadUnit: 'GB',
-    leadOfficer: 'Dr. Evelyn Reed'
+    leadOfficer: 'Dr. Evelyn Reed',
+    createdByUsername: 'senior_officer',
+    teamAssignments: [
+      { username: 'forensic_officer', fullName: 'Dr. Evelyn Reed', roleInCase: 'FORENSIC_EXPERT', clearance: 'SECRET' },
+      { username: 'custodian', fullName: 'Officer Michael Vance', roleInCase: 'EVIDENCE_CUSTODIAN', clearance: 'CONFIDENTIAL' }
+    ]
   },
   {
     id: '4',
@@ -100,7 +116,12 @@ const FALLBACK_CASES = [
     registrationDate: new Date(Date.now() - 14 * 24 * 3600 * 1000).toISOString(),
     payloadSize: '1.45820',
     payloadUnit: 'GB',
-    leadOfficer: 'Registrar Arthur Pendelton'
+    leadOfficer: 'Registrar Arthur Pendelton',
+    createdByUsername: 'court_officer',
+    teamAssignments: [
+      { username: 'court_officer', fullName: 'Registrar Arthur Pendelton', roleInCase: 'COURT_REGISTRAR', clearance: 'PUBLIC' },
+      { username: 'prosecutor', fullName: 'Counsel Diane Lockhart', roleInCase: 'PUBLIC_PROSECUTOR', clearance: 'SECRET' }
+    ]
   }
 ];
 

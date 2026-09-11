@@ -371,6 +371,7 @@ export const CasesListPage = () => {
   };
 
   const isAdmin = hasRole('ADMIN');
+  const isSupervisor = hasRole('ADMIN') || hasRole('SENIOR_OFFICER');
 
   const canReadCases = hasPermission ? hasPermission('CASE_READ') : true;
 
@@ -385,8 +386,8 @@ export const CasesListPage = () => {
   const myAccessibleCount = canReadCases ? evaluatedCases.filter(c => c.access.allowed).length : 0;
   const restrictedCount = evaluatedCases.filter(c => !c.access.allowed).length;
 
-  // Strict Person-Level Isolation: If CASE_READ revoked, show zero cases; else non-admin officers only see cases assigned to them
-  const poolCases = !canReadCases ? [] : (isAdmin ? evaluatedCases : evaluatedCases.filter(c => c.access.allowed));
+  // Strict Person-Level Isolation: If CASE_READ revoked, show zero cases; else non-supervisory officers ONLY see cases assigned to them
+  const poolCases = !canReadCases ? [] : (isSupervisor ? evaluatedCases : evaluatedCases.filter(c => c.access.allowed));
 
   const filteredCases = poolCases.filter((c) => {
     const matchesSearch = 
@@ -395,7 +396,7 @@ export const CasesListPage = () => {
       c.firNumber?.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = statusFilter === 'ALL' || c.status === statusFilter;
     const matchesScope = 
-      !isAdmin ||
+      !isSupervisor ||
       scopeFilter === 'ALL' ||
       (scopeFilter === 'ASSIGNED' && c.access.allowed) ||
       (scopeFilter === 'RESTRICTED' && !c.access.allowed);
@@ -490,8 +491,8 @@ export const CasesListPage = () => {
         </div>
       ) : (
         <>
-          {/* Scope Selector: All vs My Assigned vs Restricted (For Admin Supervision) */}
-          {isAdmin ? (
+          {/* Scope Selector: All vs My Assigned vs Restricted (For Supervisory Management) */}
+          {isSupervisor ? (
         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => setScopeFilter('ALL')}

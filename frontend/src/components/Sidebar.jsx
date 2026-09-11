@@ -127,7 +127,8 @@ export const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
             classification: 'PUBLIC',
             createdByUsername: 'court_officer',
             teamAssignments: [
-              { username: 'court_officer', fullName: 'Registrar Arthur Pendelton', roleInCase: 'COURT_REGISTRAR', clearance: 'PUBLIC' }
+              { username: 'court_officer', fullName: 'Registrar Arthur Pendelton', roleInCase: 'COURT_REGISTRAR', clearance: 'PUBLIC' },
+              { username: 'prosecutor', fullName: 'Counsel Diane Lockhart', roleInCase: 'PUBLIC_PROSECUTOR', clearance: 'SECRET' }
             ]
           },
         ];
@@ -142,7 +143,9 @@ export const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
             : (c.priority === 'HIGH'
               ? 'text-rose-400 bg-rose-500/10 border-rose-500/20'
               : 'text-violet-400 bg-violet-500/10 border-violet-500/20'),
-          classification: c.classification || 'RESTRICTED'
+          classification: c.classification || 'RESTRICTED',
+          createdByUsername: c.createdByUsername,
+          teamAssignments: c.teamAssignments
         }));
 
         const pool = [...formattedCustom, ...defaultPriorityCases];
@@ -156,9 +159,7 @@ export const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
           }
         }
 
-        const allowed = unique.filter((c) =>
-          checkCaseAccess(user, { id: c.id, caseNumber: c.caseNumber, classification: c.classification }).allowed
-        );
+        const allowed = unique.filter((c) => checkCaseAccess(user, c).allowed);
         setActiveCasesSummary(allowed.slice(0, 3));
       } catch (_) {
         setActiveCasesSummary([]);

@@ -8,6 +8,7 @@ import {
   CheckCircle, ChevronRight, Hash, Award, Building
 } from 'lucide-react';
 import { logCourtBundleExport, logSec65BExport } from '../services/auditLogger';
+import { checkCaseAccess, canClearanceAccess } from '../services/abac';
 
 const FALLBACK_CASES = [
   {
@@ -79,7 +80,7 @@ const INITIAL_HEARINGS = {
 };
 
 export const CourtProceedingsPage = () => {
-  const { user } = useAuth();
+  const { user, hasRole } = useAuth();
   const [cases, setCases] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedCaseId, setSelectedCaseId] = useState('');
@@ -118,7 +119,7 @@ export const CourtProceedingsPage = () => {
 
   useEffect(() => {
     loadCases();
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     if (selectedCaseId) {
@@ -290,12 +291,17 @@ export const CourtProceedingsPage = () => {
       }
     } catch (_) {}
 
-    setCases(combined);
-    if (combined.length > 0) {
+    const isSupervisor = hasRole ? (hasRole('ADMIN') || hasRole('SENIOR_OFFICER')) : false;
+    const allowedCases = isSupervisor ? combined : combined.filter(c => checkCaseAccess(user, c).allowed);
+
+    setCases(allowedCases);
+    if (allowedCases.length > 0) {
       const urlParams = new URLSearchParams(window.location.search);
       const paramCaseId = urlParams.get('caseId');
-      const matched = paramCaseId ? combined.find(c => String(c.id) === String(paramCaseId) || c.caseNumber === paramCaseId) : null;
-      setSelectedCaseId(matched ? matched.id : combined[0].id);
+      const matched = paramCaseId ? allowedCases.find(c => String(c.id) === String(paramCaseId) || c.caseNumber === paramCaseId) : null;
+      setSelectedCaseId(matched ? matched.id : allowedCases[0].id);
+    } else {
+      setSelectedCaseId('');
     }
     setLoading(false);
   };
@@ -523,48 +529,59 @@ export const CourtProceedingsPage = () => {
       </div>
 
       {/* Case Selector and Status Banner */}
-      <div className="glass-panel p-5 rounded-2xl border border-slate-800 space-y-4 bg-gradient-to-r from-slate-900/90 via-slate-900/70 to-indigo-950/30">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div className="space-y-1 flex-1">
-            <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-              <Building className="w-3.5 h-3.5 text-indigo-400" />
-              <span>Select Active Judicial Case Dossier:</span>
-            </label>
-            <select
-              value={selectedCaseId}
-              onChange={(e) => setSelectedCaseId(e.target.value)}
-              className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs text-slate-100 font-mono focus:outline-none focus:border-indigo-500 shadow-inner"
-            >
-              {cases.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.caseNumber} — {c.title} [{c.status}]
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="flex items-center gap-3 shrink-0 pt-2 lg:pt-0">
-            <button
-              onClick={handleGenerateBundle}
-              disabled={generating || !selectedCaseId}
-              className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold uppercase tracking-wider transition flex items-center justify-center gap-2 disabled:opacity-50 shadow-lg shadow-indigo-600/20 active:scale-95 whitespace-nowrap"
-            >
-              <Scale className="w-4 h-4" />
-              <span>{generating ? 'Compiling Legal Package...' : 'Compile Judicial Bundle'}</span>
-            </button>
-          </div>
+      {cases.length === 0 ? (
+        <div className="glass-panel p-8 rounded-2xl border border-slate-800 text-center space-y-3 bg-slate-900/60">
+          <Scale className="w-8 h-8 text-slate-500 mx-auto" />
+          <h3 className="text-base font-bold text-slate-200">No Assigned Judicial Dockets</h3>
+          <p className="text-xs text-slate-400 max-w-md mx-auto">
+            You do not currently have any active case dossiers assigned to your officer account ({user?.username}).
+            Under ABAC security protocols, only court proceedings for cases assigned to your persona are accessible.
+          </p>
         </div>
+      ) : (
+        <div className="glass-panel p-5 rounded-2xl border border-slate-800 space-y-4 bg-gradient-to-r from-slate-900/90 via-slate-900/70 to-indigo-950/30">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div className="space-y-1 flex-1">
+              <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                <Building className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Select Active Judicial Case Dossier:</span>
+              </label>
+              <select
+                value={selectedCaseId}
+                onChange={(e) => setSelectedCaseId(e.target.value)}
+                className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs text-slate-100 font-mono focus:outline-none focus:border-indigo-500 shadow-inner"
+              >
+                {cases.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.caseNumber} — {c.title} [{c.status}]
+                  </option>
+                ))}
+              </select>
+            </div>
 
-        {activeCase && (
-          <div className="flex flex-wrap items-center gap-3 pt-2 text-xs font-mono border-t border-slate-800/80">
-            <span className="text-slate-400">Classification: <span className="text-rose-400 font-bold">{activeCase.classificationLevel || 'SECRET'}</span></span>
-            <span className="text-slate-600">|</span>
-            <span className="text-slate-400">Current Status: <span className="text-emerald-400 font-bold">{activeCase.status}</span></span>
-            <span className="text-slate-600">|</span>
-            <span className="text-slate-400">Case ID: <span className="text-slate-200">{activeCase.caseNumber}</span></span>
+            <div className="flex items-center gap-3 shrink-0 pt-2 lg:pt-0">
+              <button
+                onClick={handleGenerateBundle}
+                disabled={generating || !selectedCaseId}
+                className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold uppercase tracking-wider transition flex items-center justify-center gap-2 disabled:opacity-50 shadow-lg shadow-indigo-600/20 active:scale-95 whitespace-nowrap"
+              >
+                <Scale className="w-4 h-4" />
+                <span>{generating ? 'Compiling Legal Package...' : 'Compile Judicial Bundle'}</span>
+              </button>
+            </div>
           </div>
-        )}
-      </div>
+
+          {activeCase && (
+            <div className="flex flex-wrap items-center gap-3 pt-2 text-xs font-mono border-t border-slate-800/80">
+              <span className="text-slate-400">Classification: <span className="text-rose-400 font-bold">{activeCase.classificationLevel || 'SECRET'}</span></span>
+              <span className="text-slate-600">|</span>
+              <span className="text-slate-400">Current Status: <span className="text-emerald-400 font-bold">{activeCase.status}</span></span>
+              <span className="text-slate-600">|</span>
+              <span className="text-slate-400">Case ID: <span className="text-slate-200">{activeCase.caseNumber}</span></span>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* CHARGE SHEET & PROSECUTION REVIEW WORKFLOW */}
       {chargeSheet && (
