@@ -55,6 +55,10 @@ public class CaseService {
     ) {
         long count = caseRepository.count() + 1;
         String caseNumber = String.format("CASE-%d-%03d", Year.now().getValue(), count);
+        while (caseRepository.existsByCaseNumber(caseNumber)) {
+            count++;
+            caseNumber = String.format("CASE-%d-%03d", Year.now().getValue(), count);
+        }
 
         Case aCase = new Case();
         aCase.setCaseNumber(caseNumber);

@@ -164,7 +164,37 @@ export const CasesListPage = () => {
   const getStoredCustomCases = () => {
     try {
       const stored = localStorage.getItem('sih_registered_cases');
-      return stored ? JSON.parse(stored) : [];
+      if (!stored) return [];
+      const list = JSON.parse(stored);
+      if (!Array.isArray(list)) return [];
+
+      let maxSeq = 4;
+      list.forEach(c => {
+        const m = c.caseNumber?.match(/CASE-\d{4}-(\d+)/);
+        if (m) {
+          const n = parseInt(m[1], 10);
+          if (n > maxSeq) maxSeq = n;
+        }
+      });
+
+      let changed = false;
+      const assignedNums = new Set(['CASE-2026-001']);
+      const uniqueList = list.map(c => {
+        let num = c.caseNumber?.trim();
+        if (!num || assignedNums.has(num)) {
+          maxSeq++;
+          num = `CASE-2026-${String(maxSeq).padStart(3, '0')}`;
+          changed = true;
+          return { ...c, caseNumber: num };
+        }
+        assignedNums.add(num);
+        return c;
+      });
+
+      if (changed) {
+        localStorage.setItem('sih_registered_cases', JSON.stringify(uniqueList));
+      }
+      return uniqueList;
     } catch {
       return [];
     }
@@ -173,7 +203,7 @@ export const CasesListPage = () => {
   const saveCustomCase = (newCase) => {
     try {
       const current = getStoredCustomCases();
-      const updated = [newCase, ...current.filter(c => c.id !== newCase.id)];
+      const updated = [newCase, ...current.filter(c => String(c.id) !== String(newCase.id))];
       localStorage.setItem('sih_registered_cases', JSON.stringify(updated));
     } catch (_) {}
   };
@@ -247,14 +277,38 @@ export const CasesListPage = () => {
         console.warn('API createCase note:', apiErr.message);
       }
       
+      const allExistingCases = [...cases, ...FALLBACK_CASES, ...getStoredCustomCases()];
+      const existingNums = new Set();
+      let maxSeq = 4;
+      allExistingCases.forEach(c => {
+        if (c.caseNumber) {
+          const numTrim = c.caseNumber.trim();
+          existingNums.add(numTrim);
+          const match = numTrim.match(/CASE-\d{4}-(\d+)/);
+          if (match) {
+            const n = parseInt(match[1], 10);
+            if (n > maxSeq) maxSeq = n;
+          }
+        }
+      });
+
+      let nextSeq = maxSeq + 1;
+      let generatedCaseNumber = `CASE-2026-${String(nextSeq).padStart(3, '0')}`;
+      while (existingNums.has(generatedCaseNumber)) {
+        nextSeq++;
+        generatedCaseNumber = `CASE-2026-${String(nextSeq).padStart(3, '0')}`;
+      }
+
       const newCaseId = createdCase?.id || 'case-' + Date.now();
-      const newCaseNumber = `CASE-2026-${String(cases.length + 1).padStart(3, '0')}`;
+      const resolvedCaseNumber = (createdCase?.caseNumber && !existingNums.has(createdCase.caseNumber))
+        ? createdCase.caseNumber
+        : generatedCaseNumber;
       const creatorUsername = user?.username || 'senior_officer';
       const creatorFullName = user?.fullName || 'Assigned Lead Officer';
 
-      const newCaseObj = (createdCase && createdCase.id) ? createdCase : {
+      const newCaseObj = (createdCase && createdCase.id) ? { ...createdCase, caseNumber: resolvedCaseNumber } : {
         id: newCaseId,
-        caseNumber: newCaseNumber,
+        caseNumber: resolvedCaseNumber,
         title: formData.title,
         description: formData.description || 'Initial investigation dossier brief.',
         firNumber: formData.firNumber,

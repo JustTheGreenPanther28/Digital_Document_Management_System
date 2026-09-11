@@ -304,7 +304,37 @@ export const CaseDetailsPage = () => {
   const getStoredCustomCases = () => {
     try {
       const stored = localStorage.getItem('sih_registered_cases');
-      return stored ? JSON.parse(stored) : [];
+      if (!stored) return [];
+      const list = JSON.parse(stored);
+      if (!Array.isArray(list)) return [];
+
+      let maxSeq = 4;
+      list.forEach(c => {
+        const m = c.caseNumber?.match(/CASE-\d{4}-(\d+)/);
+        if (m) {
+          const n = parseInt(m[1], 10);
+          if (n > maxSeq) maxSeq = n;
+        }
+      });
+
+      let changed = false;
+      const assignedNums = new Set(['CASE-2026-001']);
+      const uniqueList = list.map(c => {
+        let num = c.caseNumber?.trim();
+        if (!num || assignedNums.has(num)) {
+          maxSeq++;
+          num = `CASE-2026-${String(maxSeq).padStart(3, '0')}`;
+          changed = true;
+          return { ...c, caseNumber: num };
+        }
+        assignedNums.add(num);
+        return c;
+      });
+
+      if (changed) {
+        localStorage.setItem('sih_registered_cases', JSON.stringify(uniqueList));
+      }
+      return uniqueList;
     } catch {
       return [];
     }
@@ -315,7 +345,10 @@ export const CaseDetailsPage = () => {
       const stored = localStorage.getItem('sih_registered_cases');
       if (stored) {
         const parsed = JSON.parse(stored);
-        const idx = parsed.findIndex(c => String(c.id) === String(updatedCase.id) || c.caseNumber === updatedCase.caseNumber);
+        let idx = parsed.findIndex(c => String(c.id) === String(updatedCase.id));
+        if (idx < 0 && updatedCase.caseNumber) {
+          idx = parsed.findIndex(c => c.caseNumber === updatedCase.caseNumber);
+        }
         if (idx >= 0) {
           parsed[idx] = { ...parsed[idx], ...updatedCase };
           localStorage.setItem('sih_registered_cases', JSON.stringify(parsed));
@@ -959,9 +992,15 @@ END OF OFFICIAL SECTION 173 CrPC / BNSS JUDICIAL CHARGE SHEET DOSSIER
           [...storedDocs, ...(docs || [])].forEach(d => docMap.set(String(d.id), d));
           setDocuments(Array.from(docMap.values()));
 
-          const storedEv = getStoredEvidence().filter(
-            e => String(e.caseId) === String(caseId) || e.caseNumber === details.caseNumber
-          );
+          const storedEv = getStoredEvidence().filter(e => {
+            const eCid = e.caseId != null ? String(e.caseId).trim() : '';
+            const eCnum = e.caseNumber != null ? String(e.caseNumber).trim() : '';
+            const targetCid = String(caseId || '');
+            const targetCnum = String(details.caseNumber || '');
+            if (eCid) return eCid === targetCid || eCid === targetCnum;
+            if (eCnum) return eCnum === targetCnum;
+            return false;
+          });
           const evMap = new Map();
           [...storedEv, ...(ev || [])].forEach(e => evMap.set(String(e.id), e));
           setEvidenceList(Array.from(evMap.values()));
@@ -1022,7 +1061,15 @@ END OF OFFICIAL SECTION 173 CrPC / BNSS JUDICIAL CHARGE SHEET DOSSIER
 
         // Load any stored vault documents and evidence for this case
         const vaultDocs = getVaultDocumentsSafe(matchedCustom.id, matchedCustom.caseNumber);
-        const storedEv = getStoredEvidence().filter(e => e.caseId === matchedCustom.id || e.caseNumber === matchedCustom.caseNumber);
+        const storedEv = getStoredEvidence().filter(e => {
+          const eCid = e.caseId != null ? String(e.caseId).trim() : '';
+          const eCnum = e.caseNumber != null ? String(e.caseNumber).trim() : '';
+          const mId = String(matchedCustom.id || '');
+          const mNum = String(matchedCustom.caseNumber || '');
+          if (eCid) return eCid === mId || eCid === mNum;
+          if (eCnum) return eCnum === mNum;
+          return false;
+        });
         setDocuments(vaultDocs);
         setEvidenceList(storedEv);
         loadChargeSheetForCase(matchedCustom.id, matchedCustom);
@@ -1058,18 +1105,22 @@ END OF OFFICIAL SECTION 173 CrPC / BNSS JUDICIAL CHARGE SHEET DOSSIER
         title: fallbackCase.title || 'State vs Cyber Syndicate Alpha',
       });
       const storedDocs = getVaultDocumentsSafe(fallbackCase.id, fallbackCase.caseNumber);
-      const combinedDocs = [...storedDocs, ...FALLBACK_DOCS];
+      const isCase1 = String(fallbackCase.id) === '1' || fallbackCase.caseNumber === 'CASE-2026-001';
+      const combinedDocs = isCase1 ? [...storedDocs, ...FALLBACK_DOCS] : storedDocs;
       const docMap = new Map();
       combinedDocs.forEach(d => docMap.set(String(d.id), d));
       setDocuments(Array.from(docMap.values()));
 
-      const storedEv = getStoredEvidence().filter(
-        e => String(e.caseId) === String(fallbackCase.id) || 
-             String(e.caseId) === String(caseId) ||
-             e.caseNumber === fallbackCase.caseNumber ||
-             e.caseNumber === caseId
-      );
-      const combinedEv = [...storedEv, ...FALLBACK_EVIDENCE];
+      const storedEv = getStoredEvidence().filter(e => {
+        const eCid = e.caseId != null ? String(e.caseId).trim() : '';
+        const eCnum = e.caseNumber != null ? String(e.caseNumber).trim() : '';
+        const fId = String(fallbackCase.id || '');
+        const fNum = String(fallbackCase.caseNumber || '');
+        if (eCid) return eCid === fId || eCid === fNum;
+        if (eCnum) return eCnum === fNum;
+        return false;
+      });
+      const combinedEv = isCase1 ? [...storedEv, ...FALLBACK_EVIDENCE] : storedEv;
       const evMap = new Map();
       combinedEv.forEach(e => evMap.set(String(e.id), e));
       setEvidenceList(Array.from(evMap.values()));
@@ -1352,10 +1403,12 @@ END OF OFFICIAL SECTION 173 CrPC / BNSS JUDICIAL CHARGE SHEET DOSSIER
   const handleRegisterEvidence = async (e) => {
     e.preventDefault();
     setRegisteringEvidence(true);
+    const resolvedCaseId = String(caseData?.id || caseId);
+    const resolvedCaseNumber = String(caseData?.caseNumber || 'CASE-2026-001');
     const newEvItem = {
       id: `evd-${Date.now()}`,
-      caseId: caseId,
-      caseNumber: caseData?.caseNumber || 'CASE-2026-001',
+      caseId: resolvedCaseId,
+      caseNumber: resolvedCaseNumber,
       caseTitle: caseData?.title || 'Registered Case',
       barcode: `EVD-2026-${String(evidenceList.length + 1).padStart(3, '0')}-${String.fromCharCode(65 + evidenceList.length)}`,
       itemCategory: evidenceForm.itemCategory,
@@ -1383,27 +1436,27 @@ END OF OFFICIAL SECTION 173 CrPC / BNSS JUDICIAL CHARGE SHEET DOSSIER
     try {
       let registered = null;
       try {
-        registered = await api.registerEvidence(caseId, evidenceForm);
+        registered = await api.registerEvidence(resolvedCaseId, evidenceForm);
       } catch (_) {}
       
-      const finalEv = registered ? { ...newEvItem, ...registered } : newEvItem;
+      const finalEv = registered ? { ...newEvItem, ...registered, caseId: resolvedCaseId, caseNumber: resolvedCaseNumber } : newEvItem;
       saveEvidence(finalEv);
-      setEvidenceList(prev => [...prev, finalEv]);
+      setEvidenceList(prev => [finalEv, ...prev.filter(e => e.id !== finalEv.id)]);
       logEvidenceRegistered({
         barcode: newEvItem.barcode,
         description: evidenceForm.description,
         storageLocation: evidenceForm.storageLocation,
-        caseNumber: caseData?.caseNumber || 'CASE-2026-001'
+        caseNumber: resolvedCaseNumber
       });
       setShowEvidenceModal(false);
     } catch (err) {
       saveEvidence(newEvItem);
-      setEvidenceList(prev => [...prev, newEvItem]);
+      setEvidenceList(prev => [newEvItem, ...prev.filter(e => e.id !== newEvItem.id)]);
       logEvidenceRegistered({
         barcode: newEvItem.barcode,
         description: evidenceForm.description,
         storageLocation: evidenceForm.storageLocation,
-        caseNumber: caseData?.caseNumber || 'CASE-2026-001'
+        caseNumber: resolvedCaseNumber
       });
       setShowEvidenceModal(false);
     } finally {
@@ -1702,10 +1755,13 @@ modification, tamper event, or parity mismatch was detected during verification.
 
     const fileDataUrl = await readFileDataUrl();
 
+    const resolvedCaseId = String(caseData?.id || caseId);
+    const resolvedCaseNumber = String(caseData?.caseNumber || 'CASE-2026-001');
+
     const newDocItem = {
       id: `doc-${Date.now()}`,
-      caseId: caseId,
-      caseNumber: caseData?.caseNumber || 'CASE-2026-001',
+      caseId: resolvedCaseId,
+      caseNumber: resolvedCaseNumber,
       title: docTitle || uploadFile.name,
       documentType: docType,
       classification: docClassification,
@@ -1726,17 +1782,24 @@ modification, tamper event, or parity mismatch was detected during verification.
 
       let resDoc = null;
       try {
-        resDoc = await api.uploadDocument(caseId, fd);
+        resDoc = await api.uploadDocument(resolvedCaseId, fd);
       } catch (_) {}
 
-      const finalDoc = resDoc ? { ...resDoc, fileDataUrl } : newDocItem;
+      const finalDoc = resDoc ? {
+        ...newDocItem,
+        ...resDoc,
+        id: resDoc.id || newDocItem.id,
+        caseId: resolvedCaseId,
+        caseNumber: resolvedCaseNumber,
+        fileDataUrl
+      } : newDocItem;
       saveVaultDoc(finalDoc);
-      setDocuments(prev => [finalDoc, ...prev]);
+      setDocuments(prev => [finalDoc, ...prev.filter(d => String(d.id) !== String(finalDoc.id))]);
 
       logDocumentUpload({
         docTitle: docTitle || uploadFile.name,
         docId: finalDoc.id,
-        caseNumber: caseData?.caseNumber || 'CASE-2026-001',
+        caseNumber: resolvedCaseNumber,
         classification: docClassification,
         fileSize: uploadFile.size,
         sha256Hash: finalDoc.sha256Hash
@@ -1746,12 +1809,12 @@ modification, tamper event, or parity mismatch was detected during verification.
       setDocTitle('');
     } catch (err) {
       saveVaultDoc(newDocItem);
-      setDocuments(prev => [newDocItem, ...prev]);
+      setDocuments(prev => [newDocItem, ...prev.filter(d => String(d.id) !== String(newDocItem.id))]);
 
       logDocumentUpload({
         docTitle: docTitle || uploadFile.name,
         docId: newDocItem.id,
-        caseNumber: caseData?.caseNumber || 'CASE-2026-001',
+        caseNumber: resolvedCaseNumber,
         classification: docClassification,
         fileSize: uploadFile.size,
         sha256Hash: newDocItem.sha256Hash

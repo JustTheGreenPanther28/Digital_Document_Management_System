@@ -91,14 +91,25 @@ export function getVaultDocumentsSafe(caseId, caseNumber) {
     const raw = localStorage.getItem('sih_vault_documents');
     const list = raw ? JSON.parse(raw) : [];
     if (!caseId && !caseNumber) return list;
-    const cidStr = String(caseId || '');
-    const cnumStr = String(caseNumber || '');
-    return list.filter(d => 
-      (d.caseId && String(d.caseId) === cidStr) ||
-      (d.caseId && String(d.caseId) === cnumStr) ||
-      (d.caseNumber && d.caseNumber === cnumStr) ||
-      (d.caseNumber && d.caseNumber === cidStr)
-    );
+    const cidStr = caseId != null ? String(caseId).trim() : '';
+    const cnumStr = caseNumber != null ? String(caseNumber).trim() : '';
+
+    return list.filter(d => {
+      const docCid = d.caseId != null ? String(d.caseId).trim() : '';
+      const docCnum = d.caseNumber != null ? String(d.caseNumber).trim() : '';
+
+      // 1. Primary check: If doc has a caseId, it MUST match this case's ID or caseNumber
+      if (docCid) {
+        return (cidStr && docCid === cidStr) || (cnumStr && docCid === cnumStr);
+      }
+
+      // 2. Legacy fallback: If doc does NOT have a caseId, check caseNumber
+      if (docCnum) {
+        return (cnumStr && docCnum === cnumStr) || (cidStr && docCnum === cidStr);
+      }
+
+      return false;
+    });
   } catch {
     return [];
   }
