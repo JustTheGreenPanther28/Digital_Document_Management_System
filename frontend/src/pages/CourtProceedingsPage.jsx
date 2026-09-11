@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import AiForensicAnalysisPanel from '../components/AiForensicAnalysisPanel';
 import {
   Scale, FileText, Download, Plus, CheckCircle2, Calendar, Gavel,
   ShieldCheck, AlertCircle, Clock, BookOpen, Printer, X, User,
@@ -747,29 +746,6 @@ export const CourtProceedingsPage = () => {
         </div>
       )}
 
-      {/* AI CHARGE SHEET & FORENSIC CONSISTENCY SCRUTINY */}
-      {selectedCaseId && (
-        <div className="glass-panel p-6 rounded-2xl border border-violet-500/30 bg-slate-900/80 space-y-4 shadow-2xl">
-          <div className="flex items-center gap-3 border-b border-slate-800 pb-3">
-            <div className="w-10 h-10 rounded-xl bg-violet-600/20 border border-violet-500/30 flex items-center justify-center text-xl shadow-[0_0_15px_rgba(139,92,246,0.25)]">
-              🧠
-            </div>
-            <div>
-              <h3 className="text-sm font-bold text-slate-100 uppercase tracking-wider font-mono">
-                AI Judicial Scrutiny & Charge Sheet Consistency Engine
-              </h3>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Automated Procedural Verification · Evidence Gap Detection · BNS / IPC Statutory Alignment
-              </p>
-            </div>
-          </div>
-          <AiForensicAnalysisPanel
-            caseId={selectedCaseId}
-            chargeSheetId={chargeSheet?.id}
-            showCaseAnalysis={true}
-          />
-        </div>
-      )}
 
       {/* COMPILED JUDICIAL BUNDLE OUTPUT */}
       {bundleData && (
