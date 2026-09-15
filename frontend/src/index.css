@@ -47,19 +47,53 @@
   }
 
   html.light body {
-    background-color: #f1f5f9 !important;
+    background-color: #f4f6fb !important;
     color: #0f172a !important;
+  }
+
+  /* Universal text color adjustments for Light Mode */
+  html.light .text-white {
+    color: #0f172a !important;
+  }
+
+  html.light .text-slate-100,
+  html.light .text-slate-200 {
+    color: #1e293b !important;
+  }
+
+  html.light .text-slate-300 {
+    color: #334155 !important;
+  }
+
+  html.light .text-slate-400 {
+    color: #64748b !important;
+  }
+
+  /* Light mode borders */
+  html.light .border-white\/\[0\.08\],
+  html.light .border-white\/\[0\.07\],
+  html.light .border-white\/\[0\.06\],
+  html.light .border-white\/\[0\.04\],
+  html.light .border-white\/10,
+  html.light .border-white\/5 {
+    border-color: rgba(203, 213, 225, 0.7) !important;
   }
 
   /* Header & Navbar */
   html.light header {
     background-color: rgba(255, 255, 255, 0.95) !important;
-    border-color: rgba(203, 213, 225, 0.8) !important;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
+    border-color: rgba(226, 232, 240, 0.9) !important;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04) !important;
+  }
+
+  html.light header .font-mono.bg-clip-text {
+    background: linear-gradient(to right, #0f172a, #334155, #6366f1) !important;
+    -webkit-background-clip: text !important;
+    -webkit-text-fill-color: transparent !important;
   }
 
   html.light header input {
-    background-color: #f8fafc !important;
+    background-color: #f1f5f9 !important;
     color: #0f172a !important;
     border-color: #cbd5e1 !important;
   }
@@ -72,88 +106,93 @@
   html.light aside {
     background-color: #ffffff !important;
     border-color: #e2e8f0 !important;
-    box-shadow: 1px 0 3px rgba(0, 0, 0, 0.04) !important;
+    box-shadow: 1px 0 4px rgba(0, 0, 0, 0.03) !important;
   }
 
-  html.light aside .text-slate-400,
-  html.light aside .text-slate-300 {
+  html.light aside a.text-slate-400 {
     color: #475569 !important;
   }
 
-  html.light aside .text-white {
+  html.light aside a.text-slate-400:hover {
     color: #0f172a !important;
+    background-color: #f1f5f9 !important;
   }
 
-  /* Cards & Panels */
+  /* Active Sidebar item */
+  html.light aside a[class*="bg-gradient-to-r"] {
+    background: #ede9fe !important;
+    color: #6d28d9 !important;
+    border-color: #c4b5fd !important;
+  }
+
+  /* Tab switchers in Sidebar / Pages */
+  html.light .bg-\[\#07080E\],
+  html.light .bg-\[\#0a0d1a\] {
+    background-color: #f1f5f9 !important;
+    border-color: #e2e8f0 !important;
+  }
+
+  /* Cards, Panels & Outer Containers */
   html.light .obsidian-card,
   html.light .obsidian-panel,
   html.light .glass-card,
   html.light .glass-panel {
     background: #ffffff !important;
     border-color: #e2e8f0 !important;
-    box-shadow: 0 4px 12px -2px rgba(15, 23, 42, 0.06), 0 2px 4px -2px rgba(15, 23, 42, 0.04) !important;
+    box-shadow: 0 2px 10px -2px rgba(15, 23, 42, 0.05), 0 1px 3px rgba(0, 0, 0, 0.03) !important;
   }
 
-  /* Text inside light mode cards */
-  html.light .obsidian-card h1,
-  html.light .obsidian-card h2,
-  html.light .obsidian-card h3,
-  html.light .obsidian-card h4,
-  html.light .obsidian-card .text-white,
-  html.light .obsidian-panel .text-white,
-  html.light .glass-card .text-white,
-  html.light main h1,
-  html.light main h2,
-  html.light main h3,
-  html.light main h4 {
+  /* Overriding hardcoded dark container backgrounds */
+  html.light .bg-\[\#070913\],
+  html.light .bg-\[\#080a14\],
+  html.light .bg-\[\#08090E\],
+  html.light .bg-\[\#0A0C14\],
+  html.light .bg-\[\#0B0D17\],
+  html.light .bg-\[\#0C0E1A\],
+  html.light .bg-\[\#0C0E17\],
+  html.light .bg-\[\#0d111d\],
+  html.light .bg-\[\#0D1020\],
+  html.light .bg-\[\#121524\],
+  html.light .bg-\[\#141829\],
+  html.light .bg-\[\#161B2E\],
+  html.light .bg-\[\#181E33\],
+  html.light .bg-\[\#1A2035\] {
+    background-color: #f8fafc !important;
+    border-color: #e2e8f0 !important;
     color: #0f172a !important;
   }
 
-  html.light .obsidian-card .text-slate-200,
-  html.light .obsidian-card .text-slate-300,
-  html.light .obsidian-panel .text-slate-300,
-  html.light .glass-card .text-slate-300 {
-    color: #334155 !important;
-  }
-
-  html.light .obsidian-card .text-slate-400,
-  html.light .obsidian-panel .text-slate-400,
-  html.light .glass-card .text-slate-400 {
-    color: #64748b !important;
-  }
-
-  /* Inner elements with dark hardcoded backgrounds */
-  html.light .bg-\[\#070913\],
-  html.light .bg-\[\#080a14\],
-  html.light .bg-\[\#0C0E1A\],
-  html.light .bg-\[\#121524\],
-  html.light .bg-\[\#141829\],
-  html.light .bg-\[\#0A0C14\],
-  html.light .bg-\[\#08090E\],
-  html.light .bg-\[\#0D1020\] {
-    background-color: #f8fafc !important;
-    border-color: #e2e8f0 !important;
-    color: #1e293b !important;
+  /* Inner cards/boxes inside main cards */
+  html.light .bg-black\/40,
+  html.light .bg-black\/50,
+  html.light .bg-black\/60,
+  html.light .bg-black\/80 {
+    background-color: #f1f5f9 !important;
+    border-color: #cbd5e1 !important;
+    color: #0f172a !important;
   }
 
   /* Buttons in light mode */
-  html.light button.bg-\[\#141829\] {
+  html.light button.bg-\[\#141829\],
+  html.light button.bg-\[\#121524\] {
     background-color: #ffffff !important;
     border-color: #cbd5e1 !important;
     color: #334155 !important;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05) !important;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04) !important;
   }
 
-  html.light button.bg-\[\#141829\]:hover {
+  html.light button.bg-\[\#141829\]:hover,
+  html.light button.bg-\[\#121524\]:hover {
     background-color: #f1f5f9 !important;
     color: #0f172a !important;
   }
 
-  /* Dropdown menus */
-  html.light .dropdown-container div[class*="bg-\[\#0C0E1A\]"] {
+  /* Dropdown Menus */
+  html.light .dropdown-container div[class*="bg-\[\#0C0E1A\]"],
+  html.light div[class*="bg-\[\#0C0E1A\]"] {
     background-color: #ffffff !important;
     border-color: #cbd5e1 !important;
-    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1) !important;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.12) !important;
   }
 
   html.light .dropdown-container button {
@@ -165,11 +204,46 @@
     color: #0f172a !important;
   }
 
+  /* Light Mode Badges & Highlights */
+  html.light .bg-cyan-950\/20,
+  html.light .bg-indigo-950\/20,
+  html.light .bg-purple-950\/20 {
+    background-color: #f5f3ff !important;
+    border-color: #ddd6fe !important;
+  }
+
+  html.light .text-cyan-400,
+  html.light .text-cyan-300 {
+    color: #0284c7 !important;
+  }
+
+  html.light .text-purple-400,
+  html.light .text-purple-300,
+  html.light .text-violet-400,
+  html.light .text-violet-300 {
+    color: #6d28d9 !important;
+  }
+
+  html.light .text-emerald-400,
+  html.light .text-emerald-300 {
+    color: #059669 !important;
+  }
+
+  html.light .text-amber-400,
+  html.light .text-amber-300 {
+    color: #d97706 !important;
+  }
+
+  html.light .text-rose-400,
+  html.light .text-rose-300 {
+    color: #e11d48 !important;
+  }
+
   /* Spotlight right banner in light mode */
   html.light .spotlight-purple-gradient {
-    background: linear-gradient(135deg, #ede9fe 0%, #fae8ff 50%, #ffffff 100%) !important;
+    background: linear-gradient(135deg, #ede9fe 0%, #fdf4ff 50%, #ffffff 100%) !important;
     border-color: #c4b5fd !important;
-    box-shadow: 0 8px 24px -4px rgba(139, 92, 246, 0.15) !important;
+    box-shadow: 0 8px 24px -4px rgba(139, 92, 246, 0.12) !important;
   }
 
   html.light .spotlight-purple-gradient h3,
@@ -179,7 +253,7 @@
 
   html.light .spotlight-purple-gradient p,
   html.light .spotlight-purple-gradient .text-slate-300 {
-    color: #6b21a8 !important;
+    color: #581c87 !important;
   }
 
 
