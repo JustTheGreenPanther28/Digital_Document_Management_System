@@ -10,6 +10,7 @@ import {
   CheckCircle2, 
   Copy, 
   Shield, 
+  ShieldCheck,
   FileText, 
   Upload, 
   Plus, 
