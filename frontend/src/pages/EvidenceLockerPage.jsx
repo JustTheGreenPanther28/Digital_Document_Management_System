@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import { Link } from 'react-router-dom';
-import { Package, Search, GitCommit, ArrowRight, ShieldCheck, Tag, MapPin, ArrowUpRight } from 'lucide-react';
+import { Package, Search, GitCommit, ArrowRight, ShieldCheck, Tag, MapPin, ArrowUpRight, Blocks } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { canClearanceAccess, isEvidenceSubmittedByUser } from '../services/abac';
 import Pagination from '../components/Pagination';
+import { BlockchainVerificationModal } from '../components/BlockchainVerificationModal';
 
 const CASE_CLASSIFICATIONS = {
   '1': 'SECRET',
@@ -75,6 +76,7 @@ export const EvidenceLockerPage = () => {
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(6);
+  const [blockchainModalItem, setBlockchainModalItem] = useState(null);
 
   useEffect(() => {
     loadAllEvidence();
@@ -255,22 +257,33 @@ export const EvidenceLockerPage = () => {
                   </div>
                 </div>
 
-                <div className="mt-4 pt-3 border-t border-white/[0.06] flex items-center justify-between">
-                  <Link
-                    to={`/cases/${item.caseId || 1}`}
-                    className="text-xs text-slate-400 hover:text-white flex items-center gap-1 font-medium transition"
+                <div className="mt-4 pt-3 border-t border-white/[0.06] flex items-center justify-between gap-2">
+                  <button
+                    onClick={() => setBlockchainModalItem(item)}
+                    className="px-2.5 py-1.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 text-[11px] font-mono flex items-center gap-1.5 transition cursor-pointer"
+                    title="Verify on EVM Blockchain Smart Contract"
                   >
-                    <span>View Case File</span>
-                    <ArrowUpRight className="w-3.5 h-3.5" />
-                  </Link>
+                    <Blocks className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Blockchain Proof</span>
+                  </button>
 
-                  <Link
-                    to="/custody"
-                    className="px-3 py-1.5 rounded-full bg-emerald-600/20 hover:bg-emerald-600 border border-emerald-500/40 text-emerald-300 hover:text-white text-xs font-semibold transition flex items-center gap-1.5"
-                  >
-                    <GitCommit className="w-3.5 h-3.5" />
-                    <span>Transfer</span>
-                  </Link>
+                  <div className="flex items-center gap-2">
+                    <Link
+                      to={`/cases/${item.caseId || 1}`}
+                      className="text-xs text-slate-400 hover:text-white flex items-center gap-1 font-medium transition"
+                    >
+                      <span>Case</span>
+                      <ArrowUpRight className="w-3.5 h-3.5" />
+                    </Link>
+
+                    <Link
+                      to="/custody"
+                      className="px-3 py-1.5 rounded-full bg-emerald-600/20 hover:bg-emerald-600 border border-emerald-500/40 text-emerald-300 hover:text-white text-xs font-semibold transition flex items-center gap-1.5"
+                    >
+                      <GitCommit className="w-3.5 h-3.5" />
+                      <span>Transfer</span>
+                    </Link>
+                  </div>
                 </div>
               </div>
             ))}
@@ -286,6 +299,19 @@ export const EvidenceLockerPage = () => {
             itemLabel="evidence artifacts"
           />
         </div>
+      )}
+
+      {/* Actual EVM Blockchain Verification Modal */}
+      {blockchainModalItem && (
+        <BlockchainVerificationModal
+          isOpen={!!blockchainModalItem}
+          onClose={() => setBlockchainModalItem(null)}
+          type="EVIDENCE"
+          identifier={blockchainModalItem.barcode || blockchainModalItem.evidenceNumber || blockchainModalItem.id}
+          title={blockchainModalItem.description || blockchainModalItem.title}
+          currentHash={blockchainModalItem.sha256Hash}
+          onAnchorSuccess={loadAllEvidence}
+        />
       )}
     </div>
   );

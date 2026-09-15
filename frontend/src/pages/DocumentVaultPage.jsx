@@ -15,8 +15,10 @@ import {
   Plus, 
   X,
   Sparkles,
-  ArrowUpRight
+  ArrowUpRight,
+  Blocks
 } from 'lucide-react';
+import { BlockchainVerificationModal } from '../components/BlockchainVerificationModal';
 
 const FALLBACK_VAULT_DOCS = [
   { 
@@ -82,6 +84,7 @@ export const DocumentVaultPage = () => {
   const [docClassification, setDocClassification] = useState('RESTRICTED');
   const [uploadFile, setUploadFile] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [blockchainModalDoc, setBlockchainModalDoc] = useState(null);
 
   useEffect(() => {
     loadAllDocuments();
@@ -445,6 +448,15 @@ modification, tamper event, or parity mismatch was detected during verification.
                   </div>
 
                     <div className="flex items-center gap-2.5 flex-shrink-0">
+                      <button
+                        onClick={() => setBlockchainModalDoc(doc)}
+                        className="px-3 py-2 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 text-xs font-mono flex items-center gap-1.5 transition whitespace-nowrap cursor-pointer shadow-sm shadow-cyan-500/10 active:scale-95"
+                        title="Verify on-chain smart contract cryptographic seal"
+                      >
+                        <Blocks className="w-3.5 h-3.5 text-cyan-400" />
+                        <span>Blockchain Proof</span>
+                      </button>
+
                       {(isAuthorized && canDownload) ? (
                         <button
                           onClick={() => handleDownload(doc)}
@@ -593,6 +605,19 @@ modification, tamper event, or parity mismatch was detected during verification.
           </div>
         </div>,
         document.body
+      )}
+
+      {/* Actual EVM Blockchain Verification Modal */}
+      {blockchainModalDoc && (
+        <BlockchainVerificationModal
+          isOpen={!!blockchainModalDoc}
+          onClose={() => setBlockchainModalDoc(null)}
+          type="DOCUMENT"
+          identifier={blockchainModalDoc.id}
+          title={blockchainModalDoc.title}
+          currentHash={blockchainModalDoc.sha256Hash}
+          onAnchorSuccess={loadAllDocuments}
+        />
       )}
     </div>
   );

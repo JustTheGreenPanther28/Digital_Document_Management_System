@@ -31,6 +31,7 @@ public class EvidenceAndCustodyService {
     private final UserRepository userRepository;
     private final AuditService auditService;
     private final AbacSecurityService abacSecurity;
+    private final BlockchainEvidenceService blockchainEvidenceService;
 
     public EvidenceAndCustodyService(
         EvidenceRepository evidenceRepository,
@@ -40,7 +41,8 @@ public class EvidenceAndCustodyService {
         CaseRepository caseRepository,
         UserRepository userRepository,
         AuditService auditService,
-        AbacSecurityService abacSecurity
+        AbacSecurityService abacSecurity,
+        BlockchainEvidenceService blockchainEvidenceService
     ) {
         this.evidenceRepository = evidenceRepository;
         this.evidenceVersionRepository = evidenceVersionRepository;
@@ -50,6 +52,7 @@ public class EvidenceAndCustodyService {
         this.userRepository = userRepository;
         this.auditService = auditService;
         this.abacSecurity = abacSecurity;
+        this.blockchainEvidenceService = blockchainEvidenceService;
     }
 
     @Transactional
@@ -134,6 +137,24 @@ public class EvidenceAndCustodyService {
             null,
             "Evidence registered: " + saved.getTitle() + " (Seal: " + sealNumber + ")"
         );
+
+        // Actual EVM Blockchain Trust Layer Anchoring
+        try {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            String identity = saved.getEvidenceNumber() + ":" + saved.getSealNumber() + ":" + saved.getTitle() + ":" + saved.getStorageLocation();
+            byte[] digest = md.digest(identity.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            String sha256 = java.util.HexFormat.of().formatHex(digest);
+            blockchainEvidenceService.recordEvidenceOnChain(
+                saved.getEvidenceNumber(),
+                sha256,
+                saved.getStorageLocation(),
+                saved.getCurrentCustodian() != null ? saved.getCurrentCustodian().getUsername() : collectingOfficer.getUsername(),
+                caseId
+            );
+        } catch (Exception bEx) {
+            // Log warning but allow transaction to succeed
+            org.slf4j.LoggerFactory.getLogger(EvidenceAndCustodyService.class).warn("Blockchain anchoring notice: {}", bEx.getMessage());
+        }
 
         return saved;
     }

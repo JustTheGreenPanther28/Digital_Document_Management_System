@@ -316,6 +316,20 @@ export const api = {
   }),
   getAiResults: (caseId) => request(`/ai/results/case/${caseId}`),
   getAiResultById: (id) => request(`/ai/results/${id}`),
+
+  // ─── Actual Blockchain Trust Layer (EVM / Web3) ──────────────────────
+  getBlockchainStatus: () => request('/blockchain/status'),
+  getBlockchainReceipts: () => request('/blockchain/receipts'),
+  getBlockchainCaseReceipts: (caseId) => request(`/blockchain/receipts/case/${caseId}`),
+  verifyBlockchainEvidence: (evidenceIdentifier, currentHash) => 
+    request(`/blockchain/evidence/${evidenceIdentifier}/verify${currentHash ? `?currentHash=${encodeURIComponent(currentHash)}` : ''}`),
+  anchorBlockchainEvidence: (evidenceIdentifier) => 
+    request(`/blockchain/evidence/${evidenceIdentifier}/anchor`, { method: 'POST' }),
+  verifyBlockchainDocument: (documentId, version = 1) => 
+    request(`/blockchain/document/${documentId}/verify?version=${version}`),
+  anchorBlockchainDocument: (documentId) => 
+    request(`/blockchain/document/${documentId}/anchor`, { method: 'POST' }),
+
   // ─── RBAC Role & Permission Management ──────────────────────────────
   getRoles: () => request('/admin/roles'),
   getPermissions: () => request('/admin/permissions'),

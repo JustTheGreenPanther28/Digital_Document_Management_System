@@ -44,6 +44,7 @@ public class DocumentService {
     private final SecurityAlertRepository alertRepository;
     private final AbacSecurityService abacSecurity;
     private final ThreatDetectionService threatDetectionService;
+    private final BlockchainEvidenceService blockchainEvidenceService;
 
     @org.springframework.beans.factory.annotation.Value("${app.security.enforce-duplicate-rejection:true}")
     private boolean enforceDuplicateRejection;
@@ -60,7 +61,8 @@ public class DocumentService {
         AuditService auditService,
         SecurityAlertRepository alertRepository,
         AbacSecurityService abacSecurity,
-        ThreatDetectionService threatDetectionService
+        ThreatDetectionService threatDetectionService,
+        BlockchainEvidenceService blockchainEvidenceService
     ) {
         this.documentRepository = documentRepository;
         this.versionRepository = versionRepository;
@@ -74,6 +76,7 @@ public class DocumentService {
         this.alertRepository = alertRepository;
         this.abacSecurity = abacSecurity;
         this.threatDetectionService = threatDetectionService;
+        this.blockchainEvidenceService = blockchainEvidenceService;
     }
 
     @Transactional
@@ -185,6 +188,20 @@ public class DocumentService {
                 savedDoc.getTitle(), savedDoc.getSha256Hash(), savedDoc.getClassification())
         );
 
+        // Actual EVM Blockchain Trust Layer Anchoring
+        try {
+            blockchainEvidenceService.recordDocumentOnChain(
+                savedDoc.getId(),
+                savedDoc.getSha256Hash(),
+                savedDoc.getCurrentVersion(),
+                uploader.getUsername(),
+                caseId,
+                savedDoc.getTitle()
+            );
+        } catch (Exception bEx) {
+            log.warn("Blockchain document anchoring notice: {}", bEx.getMessage());
+        }
+
         return savedDoc;
     }
 
@@ -260,6 +277,20 @@ public class DocumentService {
             null,
             "Created version v" + nextVersion + " for document: " + doc.getTitle()
         );
+
+        // Actual EVM Blockchain Trust Layer Anchoring for new version
+        try {
+            blockchainEvidenceService.recordDocumentOnChain(
+                updated.getId(),
+                valResult.sha256Hash(),
+                nextVersion,
+                uploader.getUsername(),
+                doc.getCase().getId(),
+                updated.getTitle()
+            );
+        } catch (Exception bEx) {
+            log.warn("Blockchain version anchoring notice: {}", bEx.getMessage());
+        }
 
         return updated;
     }

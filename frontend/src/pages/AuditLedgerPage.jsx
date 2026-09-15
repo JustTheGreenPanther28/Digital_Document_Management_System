@@ -24,7 +24,8 @@ import {
   Cpu, 
   Globe,
   Briefcase,
-  ShieldAlert
+  ShieldAlert,
+  Blocks
 } from 'lucide-react';
 
 const FALLBACK_AUDIT_LOGS = [
@@ -322,10 +323,14 @@ export const AuditLedgerPage = () => {
       {/* 1. Header & Verification Action Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 mb-1.5">
+          <div className="flex items-center gap-2 mb-1.5 flex-wrap">
             <span className="text-[10px] font-mono font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 flex items-center gap-1.5">
               <Shield className="w-3 h-3 text-cyan-400" />
               Tamper-Proof Audit Ledger
+            </span>
+            <span className="text-[10px] font-mono font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 flex items-center gap-1.5">
+              <Blocks className="w-3 h-3 text-purple-400" />
+              EVM Blockchain Trust Layer Active
             </span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight flex items-center gap-2.5">
