@@ -3,14 +3,185 @@
 @tailwind utilities;
 
 @layer base {
+  /* ===================== DARK MODE (Default) ===================== */
+  :root {
+    --bg-primary: #08090E;
+    --bg-secondary: #0C0E17;
+    --bg-card: rgba(20, 24, 40, 0.75);
+    --bg-navbar: rgba(10, 12, 20, 0.92);
+    --text-primary: #f1f5f9;
+    --text-secondary: #94a3b8;
+    --text-muted: #64748b;
+    --border-color: rgba(255, 255, 255, 0.08);
+    --accent: #8B5CF6;
+  }
+
+  /* ===================== LIGHT MODE ===================== */
+  html.light {
+    --bg-primary: #f8fafc;
+    --bg-secondary: #f1f5f9;
+    --bg-card: rgba(255, 255, 255, 0.9);
+    --bg-navbar: rgba(255, 255, 255, 0.95);
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
+    --text-muted: #94a3b8;
+    --border-color: rgba(0, 0, 0, 0.08);
+    --accent: #7C3AED;
+  }
+
   body {
-    @apply bg-[#08090E] text-slate-100 antialiased;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    @apply antialiased;
     font-family: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     letter-spacing: -0.012em;
     line-height: 1.55;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    transition: background-color 0.3s ease, color 0.3s ease;
   }
+
+  /* ===================== COMPREHENSIVE LIGHT THEME OVERRIDES ===================== */
+  html.light {
+    color-scheme: light;
+  }
+
+  html.light body {
+    background-color: #f1f5f9 !important;
+    color: #0f172a !important;
+  }
+
+  /* Header & Navbar */
+  html.light header {
+    background-color: rgba(255, 255, 255, 0.95) !important;
+    border-color: rgba(203, 213, 225, 0.8) !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
+  }
+
+  html.light header input {
+    background-color: #f8fafc !important;
+    color: #0f172a !important;
+    border-color: #cbd5e1 !important;
+  }
+
+  html.light header input::placeholder {
+    color: #94a3b8 !important;
+  }
+
+  /* Sidebar */
+  html.light aside {
+    background-color: #ffffff !important;
+    border-color: #e2e8f0 !important;
+    box-shadow: 1px 0 3px rgba(0, 0, 0, 0.04) !important;
+  }
+
+  html.light aside .text-slate-400,
+  html.light aside .text-slate-300 {
+    color: #475569 !important;
+  }
+
+  html.light aside .text-white {
+    color: #0f172a !important;
+  }
+
+  /* Cards & Panels */
+  html.light .obsidian-card,
+  html.light .obsidian-panel,
+  html.light .glass-card,
+  html.light .glass-panel {
+    background: #ffffff !important;
+    border-color: #e2e8f0 !important;
+    box-shadow: 0 4px 12px -2px rgba(15, 23, 42, 0.06), 0 2px 4px -2px rgba(15, 23, 42, 0.04) !important;
+  }
+
+  /* Text inside light mode cards */
+  html.light .obsidian-card h1,
+  html.light .obsidian-card h2,
+  html.light .obsidian-card h3,
+  html.light .obsidian-card h4,
+  html.light .obsidian-card .text-white,
+  html.light .obsidian-panel .text-white,
+  html.light .glass-card .text-white,
+  html.light main h1,
+  html.light main h2,
+  html.light main h3,
+  html.light main h4 {
+    color: #0f172a !important;
+  }
+
+  html.light .obsidian-card .text-slate-200,
+  html.light .obsidian-card .text-slate-300,
+  html.light .obsidian-panel .text-slate-300,
+  html.light .glass-card .text-slate-300 {
+    color: #334155 !important;
+  }
+
+  html.light .obsidian-card .text-slate-400,
+  html.light .obsidian-panel .text-slate-400,
+  html.light .glass-card .text-slate-400 {
+    color: #64748b !important;
+  }
+
+  /* Inner elements with dark hardcoded backgrounds */
+  html.light .bg-\[\#070913\],
+  html.light .bg-\[\#080a14\],
+  html.light .bg-\[\#0C0E1A\],
+  html.light .bg-\[\#121524\],
+  html.light .bg-\[\#141829\],
+  html.light .bg-\[\#0A0C14\],
+  html.light .bg-\[\#08090E\],
+  html.light .bg-\[\#0D1020\] {
+    background-color: #f8fafc !important;
+    border-color: #e2e8f0 !important;
+    color: #1e293b !important;
+  }
+
+  /* Buttons in light mode */
+  html.light button.bg-\[\#141829\] {
+    background-color: #ffffff !important;
+    border-color: #cbd5e1 !important;
+    color: #334155 !important;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05) !important;
+  }
+
+  html.light button.bg-\[\#141829\]:hover {
+    background-color: #f1f5f9 !important;
+    color: #0f172a !important;
+  }
+
+  /* Dropdown menus */
+  html.light .dropdown-container div[class*="bg-\[\#0C0E1A\]"] {
+    background-color: #ffffff !important;
+    border-color: #cbd5e1 !important;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1) !important;
+  }
+
+  html.light .dropdown-container button {
+    color: #334155 !important;
+  }
+
+  html.light .dropdown-container button:hover {
+    background-color: #f1f5f9 !important;
+    color: #0f172a !important;
+  }
+
+  /* Spotlight right banner in light mode */
+  html.light .spotlight-purple-gradient {
+    background: linear-gradient(135deg, #ede9fe 0%, #fae8ff 50%, #ffffff 100%) !important;
+    border-color: #c4b5fd !important;
+    box-shadow: 0 8px 24px -4px rgba(139, 92, 246, 0.15) !important;
+  }
+
+  html.light .spotlight-purple-gradient h3,
+  html.light .spotlight-purple-gradient .text-white {
+    color: #4c1d95 !important;
+  }
+
+  html.light .spotlight-purple-gradient p,
+  html.light .spotlight-purple-gradient .text-slate-300 {
+    color: #6b21a8 !important;
+  }
+
 
   h1, h2, h3, h4, h5, h6 {
     font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;

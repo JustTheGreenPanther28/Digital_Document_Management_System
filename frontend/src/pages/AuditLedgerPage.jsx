@@ -328,9 +328,9 @@ export const AuditLedgerPage = () => {
               <Shield className="w-3 h-3 text-cyan-400" />
               Tamper-Proof Audit Ledger
             </span>
-            <span className="text-[10px] font-mono font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 flex items-center gap-1.5">
-              <Blocks className="w-3 h-3 text-purple-400" />
-              EVM Blockchain Trust Layer Active
+            <span className="text-[10px] font-semibold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-violet-500/20 text-violet-300 border border-violet-500/30 flex items-center gap-1.5">
+              <ShieldCheck className="w-3 h-3 text-violet-400" />
+              Blockchain Protected
             </span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight flex items-center gap-2.5">

@@ -260,11 +260,11 @@ export const EvidenceLockerPage = () => {
                 <div className="mt-4 pt-3 border-t border-white/[0.06] flex items-center justify-between gap-2">
                   <button
                     onClick={() => setBlockchainModalItem(item)}
-                    className="px-2.5 py-1.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 text-[11px] font-mono flex items-center gap-1.5 transition cursor-pointer"
-                    title="Verify on EVM Blockchain Smart Contract"
+                    className="px-2.5 py-1.5 rounded-xl bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/30 text-violet-300 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
+                    title="Verify cryptographic authenticity on blockchain"
                   >
-                    <Blocks className="w-3.5 h-3.5 text-cyan-400" />
-                    <span>Blockchain Proof</span>
+                    <ShieldCheck className="w-3.5 h-3.5 text-violet-400" />
+                    <span>Verify Integrity</span>
                   </button>
 
                   <div className="flex items-center gap-2">

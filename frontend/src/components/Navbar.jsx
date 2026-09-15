@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth, getAvailableAccounts, isUserLocked } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import {
   Shield,
   ShieldAlert,
@@ -24,11 +25,14 @@ import {
   ArrowRight,
   Sparkles,
   ArrowUpRight,
-  Menu
+  Menu,
+  Sun,
+  Moon
 } from 'lucide-react';
 
 export const Navbar = ({ onToggleMobileMenu = () => {}, isMobileMenuOpen = false }) => {
   const { user, quickSwitch, logout, hasRole, hasPermission } = useAuth();
+  const { isDark, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -356,6 +360,19 @@ export const Navbar = ({ onToggleMobileMenu = () => {}, isMobileMenuOpen = false
           <span className="text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold bg-cyan-400/20 text-cyan-300 border border-cyan-400/30">
             🇮🇳 सारथी
           </span>
+        </button>
+
+        {/* Day / Night Mode Toggle */}
+        <button
+          type="button"
+          onClick={toggleTheme}
+          title={isDark ? 'Switch to Day Mode' : 'Switch to Night Mode'}
+          className="relative w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-[#141829] hover:bg-[#1A2035] border border-white/[0.08] hover:border-amber-400/40 text-slate-300 hover:text-amber-300 flex items-center justify-center transition group shadow-sm flex-shrink-0 cursor-pointer"
+        >
+          {isDark
+            ? <Sun className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-300 group-hover:scale-110 transition" />
+            : <Moon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-400 group-hover:scale-110 transition" />
+          }
         </button>
 
         {/* Threat Alert Notification Bell - Only shown to Admin, Auditor, Senior Officer */}

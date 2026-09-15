@@ -450,11 +450,11 @@ modification, tamper event, or parity mismatch was detected during verification.
                     <div className="flex items-center gap-2.5 flex-shrink-0">
                       <button
                         onClick={() => setBlockchainModalDoc(doc)}
-                        className="px-3 py-2 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 text-xs font-mono flex items-center gap-1.5 transition whitespace-nowrap cursor-pointer shadow-sm shadow-cyan-500/10 active:scale-95"
-                        title="Verify on-chain smart contract cryptographic seal"
+                        className="px-3 py-2 rounded-xl bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/30 text-violet-300 text-xs font-semibold flex items-center gap-1.5 transition whitespace-nowrap cursor-pointer shadow-sm shadow-violet-500/10 active:scale-95"
+                        title="Verify authentic cryptographic seal on blockchain"
                       >
-                        <Blocks className="w-3.5 h-3.5 text-cyan-400" />
-                        <span>Blockchain Proof</span>
+                        <ShieldCheck className="w-3.5 h-3.5 text-violet-400" />
+                        <span>Verify Integrity</span>
                       </button>
 
                       {(isAuthorized && canDownload) ? (
